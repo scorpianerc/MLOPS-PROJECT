@@ -1,0 +1,41 @@
+preprocessing:
+  min_text_length: 5
+  remove_stopwords: true
+  lowercase: true
+  remove_punctuation: true
+  stem: true
+  language: indonesian
+
+training:
+  model_type: logistic_regression  # logistic_regression, naive_bayes, svm, bert
+  test_size: 0.25
+  random_state: 42
+  max_features: 10000
+  ngram_range: [1, 3]
+  
+  # For advanced models
+  bert_model: "indobenchmark/indobert-base-p1"
+  max_length: 128
+  batch_size: 16
+  epochs: 3
+  learning_rate: 2e-5
+
+evaluation:
+  threshold: 0.5
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1_score
+
+scraping:
+  app_id: com.valar.pintu
+  country: id
+  lang: id
+  max_reviews: 1000
+  sort_by: newest  # newest, rating, helpfulness
+
+scheduler:
+  scraping_interval_hours: 6
+  prediction_interval_hours: 1
+  model_retrain_days: 7

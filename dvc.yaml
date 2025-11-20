@@ -1,0 +1,56 @@
+stages:
+  data_collection:
+    cmd: python src/data_collection/scraper.py
+    deps:
+      - src/data_collection/scraper.py
+    outs:
+      - data/raw/reviews.csv
+    metrics:
+      - data/raw/collection_metrics.json:
+          cache: false
+
+  preprocessing:
+    cmd: python src/preprocessing/preprocess.py
+    deps:
+      - src/preprocessing/preprocess.py
+      - data/raw/reviews.csv
+    outs:
+      - data/processed/processed_reviews.csv
+      - data/processed/features.pkl
+    params:
+      - preprocessing.min_text_length
+      - preprocessing.remove_stopwords
+
+  training:
+    cmd: python src/training/train.py
+    deps:
+      - src/training/train.py
+      - data/processed/processed_reviews.csv
+    outs:
+      - models/sentiment_model.pkl
+      - models/vectorizer.pkl
+    metrics:
+      - models/metrics.json:
+          cache: false
+    plots:
+      - models/confusion_matrix.png
+      - models/training_history.csv:
+          x: epoch
+          y: accuracy
+    params:
+      - training.model_type
+      - training.test_size
+      - training.random_state
+
+  evaluation:
+    cmd: python src/training/evaluate.py
+    deps:
+      - src/training/evaluate.py
+      - models/sentiment_model.pkl
+      - data/processed/processed_reviews.csv
+    metrics:
+      - models/evaluation_metrics.json:
+          cache: false
+    plots:
+      - models/roc_curve.png
+      - models/precision_recall_curve.png

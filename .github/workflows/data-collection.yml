@@ -1,0 +1,81 @@
+name: Scheduled Data Collection
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  collect-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        
+    - name: Scrape new reviews
+      run: |
+        echo "📥 Scraping new reviews from Play Store..."
+        python src/data_collection/scraper.py
+        
+    - name: Preprocess data
+      run: |
+        echo "🔄 Preprocessing new data..."
+        python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('punkt_tab')"
+        python src/preprocessing/preprocess.py
+        
+    - name: Check for model drift
+      run: |
+        echo "📊 Checking for data/model drift..."
+        python -c "
+        import pandas as pd
+        import json
+        import os
+        from datetime import datetime
+        
+        # Load new data
+        if os.path.exists('data/processed/processed_reviews.csv'):
+            df = pd.read_csv('data/processed/processed_reviews.csv')
+            
+            # Calculate sentiment distribution
+            sentiment_dist = df['sentiment_label'].value_counts(normalize=True).to_dict()
+            
+            print('📊 Current Sentiment Distribution:')
+            for sentiment, ratio in sentiment_dist.items():
+                print(f'  {sentiment}: {ratio:.2%}')
+            
+            # Check for significant distribution shift
+            # (In production, compare with baseline metrics)
+            if sentiment_dist.get('positive', 0) < 0.30:
+                print('⚠️ WARNING: Unusual sentiment distribution detected!')
+            else:
+                print('✅ Sentiment distribution looks normal')
+        "
+        
+    - name: Commit and push new data
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add data/
+        git commit -m "chore: automated data collection - $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
+        git push || echo "No changes to push"
+        
+    - name: Upload data artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: collected-data-${{ github.run_number }}
+        path: data/raw/*.csv
+        retention-days: 30

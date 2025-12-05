@@ -8,6 +8,7 @@ on:
   schedule:
     # Run daily at 2 AM
     - cron: '0 2 * * *'
+  workflow_dispatch:
 
 env:
   PYTHON_VERSION: '3.10'

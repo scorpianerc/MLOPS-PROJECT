@@ -231,17 +231,31 @@ class IndonesianTextPreprocessor:
         
         df = df.copy()
         
+        # Check if text_column exists, if not try alternative names
+        if text_column not in df.columns:
+            if 'text' in df.columns:
+                text_column = 'text'
+            elif 'review' in df.columns:
+                text_column = 'review'
+            else:
+                raise ValueError(f"Text column '{text_column}' not found in DataFrame. Available columns: {df.columns.tolist()}")
+        
         # Apply preprocessing
         df['cleaned_text'] = df[text_column].apply(self.preprocess)
         
         # Remove empty texts
         df = df[df['cleaned_text'] != '']
         
-        # Create sentiment label based on rating
-        df['sentiment_label'] = df['rating'].apply(self._rating_to_sentiment)
+        # Create sentiment label based on rating (only if rating column exists)
+        if 'rating' in df.columns:
+            df['sentiment_label'] = df['rating'].apply(self._rating_to_sentiment)
+        else:
+            logger.warning("'rating' column not found. Skipping sentiment label creation.")
+            # Create dummy sentiment if rating is missing (for testing)
+            df['sentiment_label'] = 'neutral'
         
         # Filter untuk binary classification jika diaktifkan
-        if self.params.get('binary_classification', False):
+        if self.params.get('binary_classification', False) and 'sentiment_label' in df.columns:
             df = df[df['sentiment_label'] != 'neutral']
             logger.info(f"Binary classification: removed neutral reviews. {len(df)} reviews remaining.")
         
@@ -280,19 +294,33 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     
     # Text length features
-    df['text_length'] = df['cleaned_text'].apply(len)
-    df['word_count'] = df['cleaned_text'].apply(lambda x: len(x.split()))
+    if 'cleaned_text' in df.columns:
+        df['text_length'] = df['cleaned_text'].apply(len)
+        df['word_count'] = df['cleaned_text'].apply(lambda x: len(x.split()))
+    elif 'review_text' in df.columns:
+        df['text_length'] = df['review_text'].apply(len)
+        df['word_count'] = df['review_text'].apply(lambda x: len(x.split()))
     
     # Rating features
-    df['is_high_rating'] = (df['rating'] >= 4).astype(int)
-    df['is_low_rating'] = (df['rating'] <= 2).astype(int)
+    if 'rating' in df.columns:
+        df['is_high_rating'] = (df['rating'] >= 4).astype(int)
+        df['is_low_rating'] = (df['rating'] <= 2).astype(int)
     
-    # Thumbs up feature (popularity)
-    df['thumbs_up_log'] = np.log1p(df['thumbs_up'])
+    # Thumbs up feature (popularity) - only if column exists
+    if 'thumbs_up' in df.columns:
+        df['thumbs_up_log'] = np.log1p(df['thumbs_up'])
+    else:
+        # Default value if thumbs_up doesn't exist
+        df['thumbs_up_log'] = 0
     
     # Time features
     if 'review_date' in df.columns:
-        df['review_date'] = pd.to_datetime(df['review_date'])
+        df['review_date'] = pd.to_datetime(df['review_date'], errors='coerce')
+        df['review_year'] = df['review_date'].dt.year
+        df['review_month'] = df['review_date'].dt.month
+        df['review_day_of_week'] = df['review_date'].dt.dayofweek
+    elif 'date' in df.columns:
+        df['review_date'] = pd.to_datetime(df['date'], errors='coerce')
         df['review_year'] = df['review_date'].dt.year
         df['review_month'] = df['review_date'].dt.month
         df['review_day_of_week'] = df['review_date'].dt.dayofweek

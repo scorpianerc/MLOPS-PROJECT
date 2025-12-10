@@ -344,8 +344,8 @@ jobs:
     needs: [data-collection-and-validation, model-retraining]
     if: |
       always() &&
-      needs.model-retraining.outputs.models_trained == 'true' &&
       inputs.skip_deploy != 'true' &&
+      (needs.model-retraining.result == 'success' || needs.model-retraining.result == 'skipped') &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
     permissions:
@@ -356,11 +356,25 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Download model artifacts
+    - name: Download model artifacts (if training ran)
+      if: needs.model-retraining.outputs.models_trained == 'true'
       uses: actions/download-artifact@v4
       with:
         name: trained-models-${{ github.run_number }}
         path: models/
+      continue-on-error: true
+        
+    - name: Use existing models (if training skipped)
+      if: needs.model-retraining.result == 'skipped'
+      run: |
+        echo "ℹ️ Training was skipped (no new data)"
+        echo "Using existing models from repository"
+        if [ -d models ] && [ "$(ls -A models/*.pkl models/*.pth 2>/dev/null | wc -l)" -gt 0 ]; then
+          echo "✅ Models found:"
+          ls -lh models/*.pkl models/*.pth 2>/dev/null || true
+        else
+          echo "⚠️ No model files found in repository"
+        fi
         
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2

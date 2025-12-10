@@ -1,8 +1,4 @@
-name: DVC Pipeline & Model Training (DEPRECATED)
-
-# ⚠️ DEPRECATED: This workflow is replaced by mlops-unified-pipeline.yml
-# The unified pipeline provides: Data Validation → DVC Version Control → Retraining → Deploy
-# Please use mlops-unified-pipeline.yml for all new deployments
+name: DVC Pipeline & Model Training
 
 on:
   push:

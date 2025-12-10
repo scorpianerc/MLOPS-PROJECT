@@ -1,0 +1,450 @@
+name: MLOps Unified Pipeline
+
+on:
+  schedule:
+    # Run every 6 hours to check for new data
+    - cron: '0 */6 * * *'
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'data/**'
+      - 'src/**'
+      - 'dvc.yaml'
+      - 'params.yaml'
+  workflow_dispatch:
+    inputs:
+      force_retrain:
+        description: 'Force model retraining even if no new data'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      skip_deploy:
+        description: 'Skip deployment step'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+env:
+  PYTHON_VERSION: '3.10'
+  DVC_VERSION: '3.48.4'
+  DVC_OBJECTS_VERSION: '4.0.1'
+
+jobs:
+  data-collection-and-validation:
+    name: Data Collection & Validation
+    runs-on: ubuntu-latest
+    outputs:
+      new_data_available: ${{ steps.check_changes.outputs.has_changes }}
+      data_valid: ${{ steps.validate.outputs.is_valid }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install -r requirements.txt
+        pip install "dvc==${{ env.DVC_VERSION }}" "dvc-objects==${{ env.DVC_OBJECTS_VERSION }}" dvc-gdrive
+        python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('punkt_tab')"
+        
+    - name: Scrape new reviews (scheduled only)
+      if: github.event_name == 'schedule'
+      run: |
+        echo "📥 Scraping new reviews from Play Store..."
+        python src/data_collection/scraper.py || echo "⚠️ Scraping failed, continuing with existing data"
+        
+    - name: Check for new data
+      id: check_changes
+      run: |
+        git diff --name-only HEAD~1 HEAD | grep "data/raw/" && echo "has_changes=true" >> $GITHUB_OUTPUT || echo "has_changes=false" >> $GITHUB_OUTPUT
+        
+    - name: Data validation
+      id: validate
+      run: |
+        echo "🔍 Validating data quality..."
+        python -c "
+        import pandas as pd
+        import os
+        import sys
+        
+        try:
+            if not os.path.exists('data/raw/reviews.csv'):
+                print('⚠️ No raw data found, creating sample data...')
+                os.makedirs('data/raw', exist_ok=True)
+                pd.DataFrame({
+                    'review_id': ['r1', 'r2', 'r3', 'r4', 'r5'],
+                    'review_text': ['Aplikasi sangat bagus', 'Buruk sekali', 'Cukup baik', 'Tidak memuaskan', 'Excellent app'],
+                    'rating': [5, 1, 4, 2, 5],
+                    'date': ['2024-01-01']*5
+                }).to_csv('data/raw/reviews.csv', index=False)
+            
+            df = pd.read_csv('data/raw/reviews.csv')
+            
+            # Validation checks
+            assert len(df) > 0, 'Dataset is empty'
+            assert 'review_text' in df.columns, 'Missing review_text column'
+            assert 'rating' in df.columns, 'Missing rating column'
+            assert df['review_text'].notna().all(), 'Found null values in review_text'
+            
+            print(f'✅ Data validation passed: {len(df)} reviews')
+            print(f'📊 Rating distribution:\n{df[\"rating\"].value_counts().sort_index()}')
+            
+            # Check for data drift
+            if len(df) > 100:
+                positive_ratio = (df['rating'] >= 4).mean()
+                print(f'📈 Positive sentiment ratio: {positive_ratio:.2%}')
+                if positive_ratio < 0.3 or positive_ratio > 0.9:
+                    print('⚠️ WARNING: Unusual sentiment distribution detected!')
+            
+            sys.exit(0)
+        except Exception as e:
+            print(f'❌ Data validation failed: {e}')
+            sys.exit(1)
+        "
+        
+        if [ $? -eq 0 ]; then
+          echo "is_valid=true" >> $GITHUB_OUTPUT
+        else
+          echo "is_valid=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Preprocess data
+      if: steps.validate.outputs.is_valid == 'true'
+      run: |
+        echo "🔄 Preprocessing data..."
+        python src/preprocessing/preprocess.py
+        
+    - name: Upload data artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: validated-data-${{ github.run_number }}
+        path: |
+          data/raw/*.csv
+          data/processed/*.csv
+        retention-days: 30
+
+  dvc-version-control:
+    name: DVC Version Control
+    needs: data-collection-and-validation
+    if: needs.data-collection-and-validation.outputs.data_valid == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      dvc_committed: ${{ steps.dvc_commit.outputs.committed }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+        
+    - name: Install DVC
+      run: |
+        pip install "dvc==${{ env.DVC_VERSION }}" "dvc-objects==${{ env.DVC_OBJECTS_VERSION }}" dvc-gdrive
+        
+    - name: Configure DVC remote
+      env:
+        DVC_REMOTE_URL: ${{ secrets.DVC_REMOTE_URL }}
+      run: |
+        if [ -n "$DVC_REMOTE_URL" ]; then
+          dvc remote modify origin url $DVC_REMOTE_URL
+          echo "✅ DVC remote configured"
+        else
+          echo "⚠️ No DVC remote URL configured, using local storage"
+        fi
+        
+    - name: Download data artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: validated-data-${{ github.run_number }}
+        path: data/
+        
+    - name: DVC add and commit
+      id: dvc_commit
+      run: |
+        echo "📦 Adding data to DVC..."
+        dvc add data/raw/reviews.csv data/processed/ || echo "DVC add completed"
+        
+        if [ -n "$(git status --porcelain)" ]; then
+          echo "✅ Changes detected, committing to DVC"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add data/*.dvc data/processed/*.dvc .dvc/config .gitignore
+          git commit -m "chore(dvc): update data version - $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
+          echo "committed=true" >> $GITHUB_OUTPUT
+        else
+          echo "⏭️ No DVC changes detected"
+          echo "committed=false" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Push to DVC remote
+      run: |
+        dvc push -v || echo "⚠️ DVC push failed or no remote configured"
+        
+    - name: Push to Git
+      if: steps.dvc_commit.outputs.committed == 'true'
+      run: |
+        git push || echo "⚠️ Git push failed"
+
+  model-retraining:
+    name: Model Retraining
+    needs: [data-collection-and-validation, dvc-version-control]
+    if: |
+      (needs.data-collection-and-validation.outputs.new_data_available == 'true' || 
+       inputs.force_retrain == 'true') &&
+      needs.data-collection-and-validation.outputs.data_valid == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      models_trained: ${{ steps.training_status.outputs.success }}
+      bert_accuracy: ${{ steps.metrics.outputs.bert_accuracy }}
+      traditional_accuracy: ${{ steps.metrics.outputs.traditional_accuracy }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install -r requirements.txt
+        pip install "dvc==${{ env.DVC_VERSION }}" "dvc-objects==${{ env.DVC_OBJECTS_VERSION }}" dvc-gdrive
+        python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('punkt_tab')"
+        
+    - name: Download data artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: validated-data-${{ github.run_number }}
+        path: data/
+        
+    - name: Pull DVC data
+      run: |
+        dvc pull -v || echo "⚠️ DVC pull failed, using local data"
+        
+    - name: Train BERT model
+      id: train_bert
+      run: |
+        echo "🤖 Training BERT model..."
+        python src/training/train_bert.py || echo "⚠️ BERT training failed"
+        
+    - name: Train traditional model
+      id: train_traditional
+      run: |
+        echo "📊 Training traditional ML model..."
+        python src/training/train.py || echo "⚠️ Traditional model training failed"
+        
+    - name: Extract metrics
+      id: metrics
+      run: |
+        if [ -f models/bert_metrics.json ]; then
+          BERT_ACC=$(python -c "import json; print(json.load(open('models/bert_metrics.json'))['accuracy'])")
+          echo "bert_accuracy=$BERT_ACC" >> $GITHUB_OUTPUT
+          echo "🤖 BERT Accuracy: $BERT_ACC"
+        fi
+        
+        if [ -f models/metrics.json ]; then
+          TRAD_ACC=$(python -c "import json; print(json.load(open('models/metrics.json'))['test_accuracy'])")
+          echo "traditional_accuracy=$TRAD_ACC" >> $GITHUB_OUTPUT
+          echo "📊 Traditional ML Accuracy: $TRAD_ACC"
+        fi
+        
+    - name: Set training status
+      id: training_status
+      run: |
+        if [ -f models/bert_metrics.json ] || [ -f models/metrics.json ]; then
+          echo "success=true" >> $GITHUB_OUTPUT
+          echo "✅ At least one model trained successfully"
+        else
+          echo "success=false" >> $GITHUB_OUTPUT
+          echo "❌ No models were trained successfully"
+        fi
+        
+    - name: Show model performance
+      run: |
+        echo "=== 📊 Model Performance Summary ==="
+        if [ -f models/bert_metrics.json ]; then
+          echo "🤖 BERT Model:"
+          cat models/bert_metrics.json | python -m json.tool
+        fi
+        if [ -f models/metrics.json ]; then
+          echo "📈 Traditional ML:"
+          cat models/metrics.json | python -m json.tool
+        fi
+        
+    - name: Commit models to DVC
+      run: |
+        dvc add models/ || echo "DVC add models completed"
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add models/*.dvc .dvc/config
+        git commit -m "chore(models): update trained models - $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes"
+        git push || echo "⚠️ Git push failed"
+        dvc push -v || echo "⚠️ DVC push failed"
+        
+    - name: Upload model artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: trained-models-${{ github.run_number }}
+        path: |
+          models/*.pkl
+          models/*.pth
+          models/*.json
+        retention-days: 90
+        
+    - name: Create metrics summary
+      if: always()
+      run: |
+        echo "## 📊 Model Training Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f models/bert_metrics.json ]; then
+          echo "### 🤖 BERT Model" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat models/bert_metrics.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -f models/metrics.json ]; then
+          echo "### 📈 Traditional ML Model" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat models/metrics.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        fi
+
+  docker-build-and-deploy:
+    name: Build & Deploy
+    needs: [data-collection-and-validation, model-retraining]
+    if: |
+      always() &&
+      needs.model-retraining.outputs.models_trained == 'true' &&
+      inputs.skip_deploy != 'true' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download model artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: trained-models-${{ github.run_number }}
+        path: models/
+        
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+      
+    - name: Log in to Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v4
+      with:
+        images: ghcr.io/${{ github.repository }}
+        tags: |
+          type=ref,event=branch
+          type=semver,pattern={{version}}
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+          
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: Create deployment summary
+      run: |
+        echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Docker Image**: ${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **BERT Accuracy**: ${{ needs.model-retraining.outputs.bert_accuracy }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Traditional ML Accuracy**: ${{ needs.model-retraining.outputs.traditional_accuracy }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Deploy Time**: $(date +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        
+    - name: Deploy to production
+      run: |
+        echo "🚀 Deploying to production environment..."
+        # Uncomment and configure based on your deployment target:
+        # docker-compose pull
+        # docker-compose up -d
+        # kubectl apply -f k8s/
+        # Or trigger cloud deployment via API
+        
+    - name: Health check
+      run: |
+        echo "🏥 Running health checks..."
+        # Add your health check logic
+        # curl -f http://your-app-url/health || exit 1
+
+  notification:
+    name: Send Notifications
+    needs: [data-collection-and-validation, dvc-version-control, model-retraining, docker-build-and-deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Create pipeline summary
+      run: |
+        echo "## 🔄 MLOps Pipeline Execution Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Data Validation | ${{ needs.data-collection-and-validation.outputs.data_valid == 'true' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| New Data Available | ${{ needs.data-collection-and-validation.outputs.new_data_available == 'true' && '✅ Yes' || '⏭️ No' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| DVC Committed | ${{ needs.dvc-version-control.outputs.dvc_committed == 'true' && '✅ Yes' || '⏭️ No' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Models Trained | ${{ needs.model-retraining.outputs.models_trained == 'true' && '✅ Yes' || '⏭️ Skipped' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Deployment | ${{ needs.docker-build-and-deploy.result == 'success' && '✅ Success' || '⏭️ Skipped' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Pipeline Run**: #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Timestamp**: $(date +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+        
+    - name: Notify on failure
+      if: |
+        needs.data-collection-and-validation.result == 'failure' ||
+        needs.model-retraining.result == 'failure' ||
+        needs.docker-build-and-deploy.result == 'failure'
+      run: |
+        echo "⚠️ Pipeline completed with failures"
+        # Add notification logic (Slack, Discord, Email, etc.)

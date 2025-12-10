@@ -1,0 +1,139 @@
+﻿name: Manual Model Training
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_type:
+        description: 'Model type to train (bert or traditional)'
+        required: true
+        default: 'bert'
+        type: choice
+        options:
+          - bert
+          - traditional
+          - both
+
+env:
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  train-model:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Download NLTK data
+      run: |
+        python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('punkt_tab')"
+        
+    - name: Setup DVC
+      run: |
+        pip install --upgrade pip setuptools wheel
+        pip install "dvc==3.48.4" "dvc-objects==4.0.1"
+        dvc pull -v || echo "No DVC data to pull"
+        
+    - name: Check data availability
+      run: |
+        echo "Checking raw data..."
+        if [ ! -f data/raw/reviews.csv ]; then
+          echo "Creating sample data for CI/CD testing..."
+          mkdir -p data/raw
+          cat > data/raw/reviews.csv <<EOF
+review_id,review_text,rating,date
+sample1,Aplikasi bagus,5,2024-01-01
+sample2,Sangat buruk,1,2024-01-02
+sample3,Lumayan ok,3,2024-01-03
+EOF
+          echo "Sample data created"
+        else
+          echo "Raw data found"
+          wc -l data/raw/reviews.csv
+        fi
+        
+        echo "Checking processed data..."
+        if [ ! -f data/processed/processed_reviews.csv ]; then
+          echo "Processed data not found, running preprocessing..."
+          python src/preprocessing/preprocess.py
+        else
+          echo "✅ Processed data found"
+          head -n 5 data/processed/processed_reviews.csv
+        fi
+        
+    - name: Train BERT model
+      if: github.event.inputs.model_type == 'bert' || github.event.inputs.model_type == 'both' || github.event.inputs.model_type == ''
+      run: |
+        echo "Training BERT model..."
+        python src/training/train_bert.py
+        
+    - name: Train Traditional ML model
+      if: github.event.inputs.model_type == 'traditional' || github.event.inputs.model_type == 'both'
+      run: |
+        echo "Training traditional ML model..."
+        python src/training/train.py
+        
+    - name: Validate models
+      run: |
+        echo "Validating trained models..."
+        if [ -f models/bert_metrics.json ]; then
+          cat models/bert_metrics.json | python -m json.tool
+        fi
+        if [ -f models/metrics.json ]; then
+          cat models/metrics.json | python -m json.tool
+        fi
+        
+    - name: Upload model artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: trained-models
+        path: |
+          models/
+          !models/.gitkeep
+        retention-days: 30
+        
+    - name: Upload metrics
+      uses: actions/upload-artifact@v4
+      with:
+        name: model-metrics
+        path: |
+          models/*.json
+          models/*.png
+          
+    - name: Create training summary
+      run: |
+        echo "## 🎯 Model Training Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Training Configuration" >> $GITHUB_STEP_SUMMARY
+        echo "- Python Version: ${{ env.PYTHON_VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f models/bert_metrics.json ]; then
+          echo "### 🤖 BERT Model Performance" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat models/bert_metrics.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -f models/metrics.json ]; then
+          echo "### 📊 Traditional ML Performance" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat models/metrics.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        fi

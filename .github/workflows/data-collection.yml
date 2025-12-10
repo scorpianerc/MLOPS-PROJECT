@@ -1,4 +1,8 @@
-name: Scheduled Data Collection
+name: Scheduled Data Collection (STANDALONE)
+
+# ℹ️ This workflow is also integrated into mlops-unified-pipeline.yml
+# The unified pipeline provides end-to-end automation: Collection → Validation → Training → Deploy
+# This standalone version is kept for manual data collection only
 
 on:
   schedule:

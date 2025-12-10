@@ -1,8 +1,4 @@
-﻿name: Manual Model Training (DEPRECATED)
-
-# ⚠️ DEPRECATED: This workflow is replaced by mlops-unified-pipeline.yml
-# For manual training, use the unified pipeline with force_retrain=true parameter
-# Please use mlops-unified-pipeline.yml for all new training runs
+﻿name: Manual Model Training
 
 on:
   workflow_dispatch:

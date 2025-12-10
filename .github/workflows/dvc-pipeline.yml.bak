@@ -1,8 +1,4 @@
-name: DVC Pipeline & Model Training (DEPRECATED)
-
-# ⚠️ DEPRECATED: This workflow is replaced by mlops-unified-pipeline.yml
-# The unified pipeline provides: Data Validation → DVC Version Control → Retraining → Deploy
-# Please use mlops-unified-pipeline.yml for all new deployments
+﻿name: DVC Pipeline & Model Training
 
 on:
   push:
@@ -73,12 +69,14 @@ jobs:
         if [ ! -f data/raw/reviews.csv ]; then
           echo "Creating sample data for CI/CD..."
           mkdir -p data/raw
-          echo "review_id,review_text,rating,date" > data/raw/reviews.csv
-          echo "r1,Aplikasi sangat bagus,5,2024-01-01" >> data/raw/reviews.csv
-          echo "r2,Buruk sekali,1,2024-01-01" >> data/raw/reviews.csv
-          echo "r3,Cukup baik,4,2024-01-01" >> data/raw/reviews.csv
-          echo "r4,Tidak memuaskan,2,2024-01-01" >> data/raw/reviews.csv
-          echo "r5,Excellent app,5,2024-01-01" >> data/raw/reviews.csv
+          cat > data/raw/reviews.csv <<EOF
+review_id,review_text,rating,date
+r1,Aplikasi sangat bagus,5,2024-01-01
+r2,Buruk sekali,1,2024-01-01
+r3,Cukup baik,4,2024-01-01
+r4,Tidak memuaskan,2,2024-01-01
+r5,Excellent app,5,2024-01-01
+EOF
         fi
         
     - name: Run preprocessing

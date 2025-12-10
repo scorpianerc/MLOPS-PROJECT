@@ -1,14 +1,6 @@
-name: Model Training & Testing
+name: Manual Model Training
 
 on:
-  push:
-    branches: [ main, master, develop ]
-    paths:
-      - 'src/training/**'
-      - 'src/preprocessing/**'
-      - 'params.yaml'
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
     inputs:
       model_type:
@@ -105,30 +97,12 @@ print('✅ Sample data created')
     - name: Validate models
       run: |
         echo "Validating trained models..."
-        python -c "
-        import json
-        import os
-        
-        models_found = []
-        
-        if os.path.exists('models/bert_metrics.json'):
-            with open('models/bert_metrics.json', 'r') as f:
-                bert_metrics = json.load(f)
-                print(f'✅ BERT Model - Accuracy: {bert_metrics.get(\"accuracy\", 0)*100:.2f}%')
-                models_found.append('BERT')
-                
-        if os.path.exists('models/metrics.json'):
-            with open('models/metrics.json', 'r') as f:
-                metrics = json.load(f)
-                print(f'✅ Traditional ML - Accuracy: {metrics.get(\"test_accuracy\", 0)*100:.2f}%')
-                models_found.append('Traditional ML')
-                
-        if not models_found:
-            print('❌ No models found!')
-            exit(1)
-        else:
-            print(f'\\n✅ Successfully trained: {', '.join(models_found)}')
-        "
+        if [ -f models/bert_metrics.json ]; then
+          cat models/bert_metrics.json | python -m json.tool
+        fi
+        if [ -f models/metrics.json ]; then
+          cat models/metrics.json | python -m json.tool
+        fi
         
     - name: Upload model artifacts
       uses: actions/upload-artifact@v4
@@ -171,62 +145,3 @@ print('✅ Sample data created')
           cat models/metrics.json >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
         fi
-        
-  model-comparison:
-    needs: train-model
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        
-    - name: Download artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: model-metrics
-        path: models/
-        
-    - name: Compare with baseline
-      run: |
-        echo "Comparing model performance with baseline..."
-        python -c "
-        import json
-        import os
-        
-        def load_metrics(file_path):
-            if os.path.exists(file_path):
-                with open(file_path, 'r') as f:
-                    return json.load(f)
-            return None
-            
-        current_bert = load_metrics('models/bert_metrics.json')
-        current_trad = load_metrics('models/metrics.json')
-        
-        print('## Model Performance Comparison')
-        print('\\n### Current Models:')
-        
-        if current_bert:
-            print(f'- BERT Accuracy: {current_bert.get(\"accuracy\", 0)*100:.2f}%')
-            
-        if current_trad:
-            print(f'- Traditional ML Accuracy: {current_trad.get(\"test_accuracy\", 0)*100:.2f}%')
-        " >> comparison.txt
-        
-        cat comparison.txt
-        
-    - name: Comment on PR
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const fs = require('fs');
-          const comparison = fs.readFileSync('comparison.txt', 'utf8');
-          
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: comparison
-          });

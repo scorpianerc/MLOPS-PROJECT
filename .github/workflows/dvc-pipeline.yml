@@ -1,10 +1,9 @@
-name: DVC Pipeline
+name: DVC Pipeline & Model Training
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [ main, master ]
     paths:
-      - 'data/**'
       - 'src/**'
       - 'dvc.yaml'
       - 'params.yaml'
@@ -56,58 +55,56 @@ jobs:
       run: |
         dvc pull -v || echo "No remote data to pull"
         
-    - name: Check data files
+    - name: Prepare sample data if needed
       run: |
-        echo "Checking data files..."
-        ls -lah data/raw/ || echo "No raw data"
-        ls -lah data/processed/ || echo "No processed data"
+        if [ ! -f data/raw/reviews.csv ]; then
+          echo "Creating sample data for CI/CD..."
+          mkdir -p data/raw
+          python -c "
+import pandas as pd
+df = pd.DataFrame({
+    'review_id': ['r1', 'r2', 'r3', 'r4', 'r5'],
+    'review_text': ['Aplikasi sangat bagus', 'Buruk sekali', 'Cukup baik', 'Tidak memuaskan', 'Excellent app'],
+    'rating': [5, 1, 4, 2, 5],
+    'date': ['2024-01-01']*5
+})
+df.to_csv('data/raw/reviews.csv', index=False)
+          "
+        fi
         
-    - name: Run DVC pipeline - Data Collection
+    - name: Run preprocessing
       run: |
-        echo "Running data collection stage..."
-        dvc repro data_collection || echo "Skipping data collection (no changes)"
+        echo "Running preprocessing..."
+        python src/preprocessing/preprocess.py
         
-    - name: Run DVC pipeline - Preprocessing
+    - name: Train BERT model
       run: |
-        echo "Running preprocessing stage..."
-        dvc repro preprocessing
+        echo "Training BERT model..."
+        python src/training/train_bert.py || echo "BERT training failed, continuing..."
         
-    - name: Run DVC pipeline - Training BERT
+    - name: Train traditional model
       run: |
-        echo "Running BERT training stage..."
-        dvc repro training_bert || echo "BERT training skipped or failed"
+        echo "Training traditional ML model..."
+        python src/training/train.py || echo "Traditional training failed, continuing..."
         
-    - name: Run DVC pipeline - Training Traditional
+    - name: Show model metrics
       run: |
-        echo "Running traditional ML training stage..."
-        dvc repro training_traditional || echo "Traditional training skipped"
+        echo "=== Model Performance ==="
+        if [ -f models/bert_metrics.json ]; then
+          echo "BERT Model:"
+          cat models/bert_metrics.json | python -m json.tool
+        fi
+        if [ -f models/metrics.json ]; then
+          echo "Traditional ML:"
+          cat models/metrics.json | python -m json.tool
+        fi
         
-    - name: Show metrics
-      run: |
-        echo "=== DVC Metrics ==="
-        dvc metrics show
-        
-    - name: Show plots
-      run: |
-        echo "=== DVC Plots ==="
-        dvc plots show || echo "No plots available"
-        
-    - name: Compare metrics with main branch
-      if: github.event_name == 'pull_request'
-      run: |
-        git fetch origin main:main
-        dvc metrics diff main || echo "No metrics to compare"
-        
-    - name: Push DVC outputs to remote
+    - name: Commit DVC changes
       if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-      env:
-        DVC_REMOTE_URL: ${{ secrets.DVC_REMOTE_URL }}
       run: |
-        if [ -n "$DVC_REMOTE_URL" ]; then
-          dvc push -v
-          echo "DVC outputs pushed to remote"
-        else
-          echo "No DVC remote configured, skipping push"
+        if [ -n "$(git status --porcelain)" ]; then
+          dvc commit -f || echo "No DVC changes to commit"
+          dvc push -v || echo "No DVC remote configured"
         fi
         
     - name: Upload metrics as artifacts

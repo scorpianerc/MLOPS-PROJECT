@@ -16,12 +16,31 @@ stages:
       - data/raw/reviews.csv
     outs:
       - data/processed/processed_reviews.csv
-      - data/processed/features.pkl
     params:
       - preprocessing.min_text_length
       - preprocessing.remove_stopwords
+      - preprocessing.binary_classification
 
-  training:
+  training_bert:
+    cmd: python src/training/train_bert.py
+    deps:
+      - src/training/train_bert.py
+      - data/processed/processed_reviews.csv
+    outs:
+      - models/bert_model
+    metrics:
+      - models/bert_metrics.json:
+          cache: false
+    params:
+      - training.bert_model
+      - training.max_length
+      - training.batch_size
+      - training.epochs
+      - training.learning_rate
+      - training.test_size
+      - training.random_state
+
+  training_traditional:
     cmd: python src/training/train.py
     deps:
       - src/training/train.py
@@ -34,23 +53,10 @@ stages:
           cache: false
     plots:
       - models/confusion_matrix.png
-      - models/training_history.csv:
-          x: epoch
-          y: accuracy
     params:
       - training.model_type
       - training.test_size
       - training.random_state
+      - training.max_features
+      - training.ngram_range
 
-  evaluation:
-    cmd: python src/training/evaluate.py
-    deps:
-      - src/training/evaluate.py
-      - models/sentiment_model.pkl
-      - data/processed/processed_reviews.csv
-    metrics:
-      - models/evaluation_metrics.json:
-          cache: false
-    plots:
-      - models/roc_curve.png
-      - models/precision_recall_curve.png

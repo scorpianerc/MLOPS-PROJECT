@@ -240,6 +240,11 @@ class IndonesianTextPreprocessor:
         # Create sentiment label based on rating
         df['sentiment_label'] = df['rating'].apply(self._rating_to_sentiment)
         
+        # Filter untuk binary classification jika diaktifkan
+        if self.params.get('binary_classification', False):
+            df = df[df['sentiment_label'] != 'neutral']
+            logger.info(f"Binary classification: removed neutral reviews. {len(df)} reviews remaining.")
+        
         logger.info(f"Preprocessing complete. {len(df)} reviews remaining.")
         
         return df

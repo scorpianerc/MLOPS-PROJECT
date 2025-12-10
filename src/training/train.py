@@ -93,9 +93,12 @@ class SentimentModelTrainer:
         vectorizer = TfidfVectorizer(
             max_features=self.params['max_features'],
             ngram_range=tuple(self.params['ngram_range']),
-            min_df=2,
-            max_df=0.95,
-            sublinear_tf=True
+            min_df=self.params.get('min_df', 2),
+            max_df=self.params.get('max_df', 0.95),
+            sublinear_tf=True,
+            use_idf=True,
+            smooth_idf=True,
+            norm='l2'
         )
         return vectorizer
     
@@ -106,12 +109,21 @@ class SentimentModelTrainer:
         logger.info(f"Creating model: {model_type}")
         
         if model_type == 'logistic_regression':
+            # Gunakan parameter dari params.yaml jika ada
+            C = self.params.get('C', 1.0)
+            max_iter = self.params.get('max_iter', 2000)
+            solver = self.params.get('solver', 'saga')
+            penalty = self.params.get('penalty', 'l2')
+            
             model = LogisticRegression(
                 random_state=self.params['random_state'],
-                max_iter=2000,
-                C=10.0,  # Increase regularization strength
+                max_iter=max_iter,
+                C=C,
                 class_weight='balanced',  # Handle imbalanced data
-                solver='saga'  # Better for large datasets
+                solver=solver,
+                penalty=penalty,
+                n_jobs=-1,  # Use all CPU cores
+                verbose=0
             )
         elif model_type == 'naive_bayes':
             model = MultinomialNB(alpha=0.5)
@@ -124,13 +136,15 @@ class SentimentModelTrainer:
             )
         elif model_type == 'random_forest':
             model = RandomForestClassifier(
-                n_estimators=200,
-                max_depth=20,
-                min_samples_split=5,
-                min_samples_leaf=2,
+                n_estimators=self.params.get('n_estimators', 200),
+                max_depth=self.params.get('max_depth', 30),
+                min_samples_split=self.params.get('min_samples_split', 2),
+                min_samples_leaf=self.params.get('min_samples_leaf', 1),
                 random_state=self.params['random_state'],
                 n_jobs=-1,
-                class_weight='balanced'
+                class_weight='balanced',
+                max_features='sqrt',
+                bootstrap=True
             )
         else:
             raise ValueError(f"Unknown model type: {model_type}")
@@ -217,9 +231,11 @@ class SentimentModelTrainer:
         }
         
         # Classification report
+        # Get unique labels dynamically
+        unique_labels = sorted(set(y_test_true) | set(y_test_pred))
         metrics['classification_report'] = classification_report(
             y_test_true, y_test_pred,
-            target_names=['negative', 'neutral', 'positive']
+            labels=unique_labels
         )
         
         return metrics

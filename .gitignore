@@ -31,6 +31,7 @@ reviews.csv/
 # Data (keep structure, ignore content)
 data/raw/*.csv
 data/processed/*.csv
+data/processed/*.pkl
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
@@ -38,7 +39,14 @@ data/processed/*.csv
 models/*.pkl
 models/*.json
 models/*.png
+models/bert_model/
 !models/.gitkeep
+
+# DVC
+/data/raw/reviews.csv
+/data/processed/processed_reviews.csv
+/data/processed/features.pkl
+/models/bert_model
 
 # Docker
 .dockerignore

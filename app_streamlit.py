@@ -17,6 +17,14 @@ import os
 import math
 import time
 
+# Try to import torch and transformers for BERT model
+try:
+    import torch
+    from transformers import AutoTokenizer, AutoModelForSequenceClassification
+    BERT_AVAILABLE = True
+except ImportError:
+    BERT_AVAILABLE = False
+
 # Page configuration
 st.set_page_config(
     page_title="Sentiment Analysis MLOps",
@@ -279,20 +287,103 @@ def load_data():
 @st.cache_data(ttl=30)
 def load_metrics():
     """Load metrics from JSON file with minimal caching"""
+    # Try to load BERT metrics first (better model)
+    bert_metrics_path = 'models/bert_metrics.json'
+    regular_metrics_path = 'models/metrics.json'
+    
     try:
-        with open('models/metrics.json', 'r') as f:
-            metrics_data = json.load(f)
-        required_keys = ['test_accuracy', 'test_f1', 'test_precision', 'test_recall', 
-                       'train_accuracy', 'train_f1', 'train_precision', 'train_recall']
-        for key in required_keys:
-            if key not in metrics_data:
-                metrics_data[key] = 0
-        return metrics_data
+        if os.path.exists(bert_metrics_path):
+            with open(bert_metrics_path, 'r') as f:
+                metrics_data = json.load(f)
+            metrics_data['model_type'] = 'IndoBERT'
+            # BERT metrics only have test metrics
+            if 'accuracy' in metrics_data:
+                metrics_data['test_accuracy'] = metrics_data['accuracy']
+                metrics_data['test_f1'] = metrics_data['f1']
+                metrics_data['test_precision'] = metrics_data['precision']
+                metrics_data['test_recall'] = metrics_data['recall']
+                # Set train metrics same as test (or load from training logs if available)
+                metrics_data['train_accuracy'] = metrics_data.get('train_accuracy', metrics_data['accuracy'])
+                metrics_data['train_f1'] = metrics_data.get('train_f1', metrics_data['f1'])
+                metrics_data['train_precision'] = metrics_data.get('train_precision', metrics_data['precision'])
+                metrics_data['train_recall'] = metrics_data.get('train_recall', metrics_data['recall'])
+            return metrics_data
+        elif os.path.exists(regular_metrics_path):
+            with open(regular_metrics_path, 'r') as f:
+                metrics_data = json.load(f)
+            metrics_data['model_type'] = 'Logistic Regression'
+            required_keys = ['test_accuracy', 'test_f1', 'test_precision', 'test_recall', 
+                           'train_accuracy', 'train_f1', 'train_precision', 'train_recall']
+            for key in required_keys:
+                if key not in metrics_data:
+                    metrics_data[key] = 0
+            return metrics_data
     except Exception as e:
-        return {
-            'test_accuracy': 0, 'test_f1': 0, 'test_precision': 0, 'test_recall': 0,
-            'train_accuracy': 0, 'train_f1': 0, 'train_precision': 0, 'train_recall': 0
-        }
+        pass
+    
+    return {
+        'test_accuracy': 0, 'test_f1': 0, 'test_precision': 0, 'test_recall': 0,
+        'train_accuracy': 0, 'train_f1': 0, 'train_precision': 0, 'train_recall': 0,
+        'model_type': 'Unknown'
+    }
+
+@st.cache_resource
+def load_bert_model():
+    """Load BERT model and tokenizer (cached across sessions)"""
+    if not BERT_AVAILABLE:
+        return None, None, "PyTorch/Transformers not installed"
+    
+    model_path = 'models/bert_model'
+    if not os.path.exists(model_path):
+        return None, None, "BERT model not found"
+    
+    try:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        model = AutoModelForSequenceClassification.from_pretrained(model_path)
+        model.to(device)
+        model.eval()
+        
+        # Load label map
+        with open(os.path.join(model_path, 'label_map.json'), 'r') as f:
+            label_map = json.load(f)
+        reverse_label_map = {v: k for k, v in label_map.items()}
+        
+        return model, tokenizer, device, reverse_label_map, None
+    except Exception as e:
+        return None, None, None, None, str(e)
+
+def predict_sentiment_bert(text, model, tokenizer, device, reverse_label_map):
+    """Predict sentiment using BERT model"""
+    if model is None or tokenizer is None:
+        return None, None
+    
+    try:
+        # Tokenize input
+        encoding = tokenizer(
+            text,
+            max_length=128,
+            padding='max_length',
+            truncation=True,
+            return_tensors='pt'
+        )
+        
+        # Move to device
+        input_ids = encoding['input_ids'].to(device)
+        attention_mask = encoding['attention_mask'].to(device)
+        
+        # Predict
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            logits = outputs.logits
+            probabilities = torch.nn.functional.softmax(logits, dim=1)
+            predicted_class = torch.argmax(probabilities, dim=1).item()
+            confidence = probabilities[0][predicted_class].item()
+        
+        sentiment = reverse_label_map[predicted_class]
+        return sentiment, confidence
+    except Exception as e:
+        return None, None
 
 # Initialize session state
 if 'data_loaded' not in st.session_state:
@@ -711,8 +802,23 @@ with tab4:
 
 # Model Performance Section
 if metrics:
-    st.markdown("## 🎯 Model Performance")
-
+    model_type = metrics.get('model_type', 'Unknown')
+    st.markdown(f"## 🎯 Model Performance: **{model_type}**")
+    
+    # Show model badge
+    if model_type == 'IndoBERT':
+        st.markdown("""
+        <div style='
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 8px 16px;
+            border-radius: 20px;
+            margin-bottom: 10px;
+        '>
+            <span style='color: white; font-weight: bold;'>🤖 State-of-the-art Indonesian BERT Model</span>
+        </div>
+        """, unsafe_allow_html=True)
+    
     st.markdown("### 📊 Performance Metrics")
     col1, col2, col3, col4 = st.columns(4)
     test_acc = metrics.get('test_accuracy', 0)
@@ -780,7 +886,115 @@ if metrics:
     
     with st.expander("🔍 View Raw Metrics Data"):
         st.json(metrics)
-        st.caption("Loaded from `models/metrics.json`")
+        model_file = 'bert_metrics.json' if metrics.get('model_type') == 'IndoBERT' else 'metrics.json'
+        st.caption(f"Loaded from `models/{model_file}` | Model: **{metrics.get('model_type', 'Unknown')}**")
+
+
+# ================= NEW: TRY IT YOURSELF SECTION =================
+st.markdown("---")
+st.markdown("## 🧪 Try It Yourself: Real-Time Prediction")
+
+if BERT_AVAILABLE and os.path.exists('models/bert_model'):
+    # Load BERT model
+    with st.spinner("Loading IndoBERT model..."):
+        model_result = load_bert_model()
+    
+    if len(model_result) == 5 and model_result[0] is not None:
+        model, tokenizer, device, reverse_label_map, error = model_result
+        
+        st.success(f"✅ IndoBERT model loaded successfully! Running on: **{device}**")
+        
+        # Input text area
+        user_input = st.text_area(
+            "Enter your review text (in Indonesian):",
+            placeholder="Contoh: Aplikasi ini sangat bagus dan mudah digunakan!",
+            height=100,
+            help="Type or paste a review in Indonesian and click 'Predict Sentiment'"
+        )
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            predict_button = st.button("🔮 Predict Sentiment", use_container_width=True)
+        
+        if predict_button and user_input.strip():
+            with st.spinner("Analyzing sentiment..."):
+                sentiment, confidence = predict_sentiment_bert(
+                    user_input, model, tokenizer, device, reverse_label_map
+                )
+            
+            if sentiment:
+                # Display result with styling
+                sentiment_color = {
+                    'positive': '#4CAF50',
+                    'negative': '#F44336',
+                    'neutral': '#FFC107'
+                }
+                color = sentiment_color.get(sentiment.lower(), '#2196F3')
+                
+                st.markdown(f"""
+                <div style='
+                    background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+                    backdrop-filter: blur(10px);
+                    border: 1px solid rgba(255,255,255,0.2);
+                    border-radius: 15px;
+                    padding: 25px;
+                    margin: 20px 0;
+                    text-align: center;
+                '>
+                    <h3 style='color: {color}; margin-bottom: 10px;'>
+                        Sentiment: {sentiment.upper()}
+                    </h3>
+                    <p style='font-size: 1.2rem; color: rgba(255,255,255,0.8);'>
+                        Confidence: <strong>{confidence:.1%}</strong>
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Show confidence gauge
+                fig = go.Figure(go.Indicator(
+                    mode="gauge+number",
+                    value=confidence * 100,
+                    domain={'x': [0, 1], 'y': [0, 1]},
+                    title={'text': "Confidence Level", 'font': {'color': 'white'}},
+                    number={'suffix': "%", 'font': {'color': 'white'}},
+                    gauge={
+                        'axis': {'range': [None, 100], 'tickcolor': "white"},
+                        'bar': {'color': color},
+                        'bgcolor': "rgba(255,255,255,0.1)",
+                        'borderwidth': 2,
+                        'bordercolor': "rgba(255,255,255,0.3)",
+                        'steps': [
+                            {'range': [0, 50], 'color': 'rgba(255,255,255,0.1)'},
+                            {'range': [50, 75], 'color': 'rgba(255,255,255,0.15)'},
+                            {'range': [75, 100], 'color': 'rgba(255,255,255,0.2)'}
+                        ],
+                    }
+                ))
+                fig.update_layout(
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font={'color': "white"},
+                    height=300
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.error("❌ Failed to predict sentiment. Please try again.")
+        
+        elif predict_button and not user_input.strip():
+            st.warning("⚠️ Please enter some text to analyze!")
+    
+    else:
+        error_msg = model_result[-1] if len(model_result) == 5 else "Unknown error"
+        st.error(f"❌ Failed to load BERT model: {error_msg}")
+        st.info("💡 Make sure you have trained the BERT model by running: `python src/training/train_bert.py`")
+
+else:
+    if not BERT_AVAILABLE:
+        st.warning("⚠️ PyTorch and Transformers libraries not installed.")
+        st.code("pip install torch transformers", language="bash")
+    elif not os.path.exists('models/bert_model'):
+        st.warning("⚠️ BERT model not found.")
+        st.info("💡 Train the model first: `python src/training/train_bert.py`")
 
 
 # Footer

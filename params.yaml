@@ -1,24 +1,35 @@
 preprocessing:
-  min_text_length: 5
-  remove_stopwords: true
+  min_text_length: 3
+  remove_stopwords: false  # Keep stopwords for context
   lowercase: true
-  remove_punctuation: true
-  stem: true
+  remove_punctuation: false  # Keep punctuation for sentiment (!!!, ???)
+  stem: false  # Stemming bisa menghilangkan informasi penting
   language: indonesian
+  binary_classification: true  # Only positive vs negative (remove neutral)
 
 training:
-  model_type: logistic_regression  # logistic_regression, naive_bayes, svm, bert
-  test_size: 0.25
+  model_type: bert  # Use IndoBERT for better accuracy (85%+)
+  test_size: 0.15  # 85% train, 15% test
   random_state: 42
-  max_features: 10000
-  ngram_range: [1, 3]
-  
-  # For advanced models
+  # BERT parameters
   bert_model: "indobenchmark/indobert-base-p1"
   max_length: 128
-  batch_size: 16
+  batch_size: 8  # Smaller for memory efficiency
   epochs: 3
-  learning_rate: 2e-5
+  learning_rate: 0.00002  # 2e-5 as decimal
+  # TF-IDF parameters (for non-BERT models)
+  max_features: 20000
+  ngram_range: [1, 3]
+  min_df: 1
+  max_df: 0.95
+  # Logistic Regression parameters
+  C: 3.0
+  max_iter: 5000
+  solver: 'saga'
+  penalty: 'l2'
+  # Random Forest
+  n_estimators: 200
+  max_depth: 30
 
 evaluation:
   threshold: 0.5
@@ -32,7 +43,7 @@ scraping:
   app_id: com.valar.pintu
   country: id
   lang: id
-  max_reviews: 1000
+  max_reviews: 5000
   sort_by: newest  # newest, rating, helpfulness
 
 scheduler:

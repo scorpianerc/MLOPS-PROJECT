@@ -1,0 +1,184 @@
+name: DVC Pipeline
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    paths:
+      - 'data/**'
+      - 'src/**'
+      - 'dvc.yaml'
+      - 'params.yaml'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  dvc-pipeline:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install dvc dvc-gdrive
+        
+    - name: Download NLTK data
+      run: |
+        python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('punkt_tab')"
+        
+    - name: Configure DVC remote
+      env:
+        DVC_REMOTE_URL: ${{ secrets.DVC_REMOTE_URL }}
+      run: |
+        if [ -n "$DVC_REMOTE_URL" ]; then
+          dvc remote modify origin url $DVC_REMOTE_URL
+          echo "DVC remote configured"
+        else
+          echo "No DVC remote URL configured, using local storage"
+        fi
+        
+    - name: Pull DVC data
+      run: |
+        dvc pull -v || echo "No remote data to pull"
+        
+    - name: Check data files
+      run: |
+        echo "Checking data files..."
+        ls -lah data/raw/ || echo "No raw data"
+        ls -lah data/processed/ || echo "No processed data"
+        
+    - name: Run DVC pipeline - Data Collection
+      run: |
+        echo "Running data collection stage..."
+        dvc repro data_collection || echo "Skipping data collection (no changes)"
+        
+    - name: Run DVC pipeline - Preprocessing
+      run: |
+        echo "Running preprocessing stage..."
+        dvc repro preprocessing
+        
+    - name: Run DVC pipeline - Training BERT
+      run: |
+        echo "Running BERT training stage..."
+        dvc repro training_bert || echo "BERT training skipped or failed"
+        
+    - name: Run DVC pipeline - Training Traditional
+      run: |
+        echo "Running traditional ML training stage..."
+        dvc repro training_traditional || echo "Traditional training skipped"
+        
+    - name: Show metrics
+      run: |
+        echo "=== DVC Metrics ==="
+        dvc metrics show
+        
+    - name: Show plots
+      run: |
+        echo "=== DVC Plots ==="
+        dvc plots show || echo "No plots available"
+        
+    - name: Compare metrics with main branch
+      if: github.event_name == 'pull_request'
+      run: |
+        git fetch origin main:main
+        dvc metrics diff main || echo "No metrics to compare"
+        
+    - name: Push DVC outputs to remote
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      env:
+        DVC_REMOTE_URL: ${{ secrets.DVC_REMOTE_URL }}
+      run: |
+        if [ -n "$DVC_REMOTE_URL" ]; then
+          dvc push -v
+          echo "DVC outputs pushed to remote"
+        else
+          echo "No DVC remote configured, skipping push"
+        fi
+        
+    - name: Upload metrics as artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: dvc-metrics
+        path: |
+          models/metrics.json
+          models/bert_metrics.json
+          models/evaluation_metrics.json
+          
+    - name: Upload plots as artifacts
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: dvc-plots
+        path: |
+          models/*.png
+          models/*.csv
+          
+    - name: Create metrics summary
+      if: always()
+      run: |
+        echo "## DVC Pipeline Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f models/bert_metrics.json ]; then
+          echo "### BERT Model Metrics" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat models/bert_metrics.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -f models/metrics.json ]; then
+          echo "### Traditional ML Metrics" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat models/metrics.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        fi
+        
+    - name: Comment PR with metrics
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          let comment = '## 📊 Model Performance Metrics\n\n';
+          
+          try {
+            if (fs.existsSync('models/bert_metrics.json')) {
+              const bertMetrics = JSON.parse(fs.readFileSync('models/bert_metrics.json', 'utf8'));
+              comment += '### 🤖 BERT Model\n';
+              comment += `- **Accuracy**: ${(bertMetrics.accuracy * 100).toFixed(2)}%\n`;
+              comment += `- **Precision**: ${(bertMetrics.precision * 100).toFixed(2)}%\n`;
+              comment += `- **Recall**: ${(bertMetrics.recall * 100).toFixed(2)}%\n`;
+              comment += `- **F1 Score**: ${(bertMetrics.f1 * 100).toFixed(2)}%\n\n`;
+            }
+            
+            if (fs.existsSync('models/metrics.json')) {
+              const metrics = JSON.parse(fs.readFileSync('models/metrics.json', 'utf8'));
+              comment += '### 📈 Traditional ML Model\n';
+              comment += `- **Test Accuracy**: ${(metrics.test_accuracy * 100).toFixed(2)}%\n`;
+              comment += `- **Test F1**: ${(metrics.test_f1 * 100).toFixed(2)}%\n`;
+            }
+          } catch (error) {
+            comment += '⚠️ Could not read metrics files\n';
+          }
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });

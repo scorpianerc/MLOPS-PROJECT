@@ -1,0 +1,106 @@
+schema: '2.0'
+stages:
+  data_collection:
+    cmd: python src/data_collection/scraper.py
+    deps:
+    - path: src/data_collection/scraper.py
+      hash: md5
+      md5: 2137118fa42f2944fb5940a9d937bee6
+      size: 14867
+    outs:
+    - path: data/raw/collection_metrics.json
+      hash: md5
+      md5: 9e87226a9c7487a37665e0d1d47a9332
+      size: 354
+    - path: data/raw/reviews.csv
+      hash: md5
+      md5: ddb81da8f83709a20a04c6ef41aca926
+      size: 3097806
+  preprocessing:
+    cmd: python src/preprocessing/preprocess.py
+    deps:
+    - path: data/raw/reviews.csv
+      hash: md5
+      md5: ddb81da8f83709a20a04c6ef41aca926
+      size: 3097806
+    - path: src/preprocessing/preprocess.py
+      hash: md5
+      md5: 71f81d9eb459e172b45734ac8511a58c
+      size: 10273
+    params:
+      params.yaml:
+        preprocessing.binary_classification: true
+        preprocessing.min_text_length: 3
+        preprocessing.remove_stopwords: false
+    outs:
+    - path: data/processed/processed_reviews.csv
+      hash: md5
+      md5: c94eefcd0474ef27e68cad8d4dea8b60
+      size: 3042944
+  training_bert:
+    cmd: python src/training/train_bert.py
+    deps:
+    - path: data/processed/processed_reviews.csv
+      hash: md5
+      md5: c94eefcd0474ef27e68cad8d4dea8b60
+      size: 3042944
+    - path: src/training/train_bert.py
+      hash: md5
+      md5: c86703ec8b0882311ce5d2555265a9ff
+      size: 10818
+    params:
+      params.yaml:
+        training.batch_size: 8
+        training.bert_model: indobenchmark/indobert-base-p1
+        training.epochs: 3
+        training.learning_rate: 2e-05
+        training.max_length: 128
+        training.random_state: 42
+        training.test_size: 0.15
+    outs:
+    - path: models/bert_metrics.json
+      hash: md5
+      md5: 4d833c7ca05791c561bc0ab70113894c
+      size: 136
+    - path: models/bert_model
+      hash: md5
+      md5: 253b23c0d3bd2925cb70b1b11fcba497.dir
+      size: 498735926
+      nfiles: 6
+  training_traditional:
+    cmd: python src/training/train.py
+    deps:
+    - path: data/processed/processed_reviews.csv
+      hash: md5
+      md5: c94eefcd0474ef27e68cad8d4dea8b60
+      size: 3042944
+    - path: src/training/train.py
+      hash: md5
+      md5: 30fc2cd7ca6cd62206cf35608dd5c11a
+      size: 12047
+    params:
+      params.yaml:
+        training.max_features: 20000
+        training.model_type: bert
+        training.ngram_range:
+        - 1
+        - 3
+        training.random_state: 42
+        training.test_size: 0.15
+    outs:
+    - path: models/confusion_matrix.png
+      hash: md5
+      md5: d95a0c84a5ccf8d560ed16a0dcc2090c
+      size: 89711
+    - path: models/metrics.json
+      hash: md5
+      md5: 76baf65425023238ac7bf97447a5b04f
+      size: 313
+    - path: models/sentiment_model.pkl
+      hash: md5
+      md5: c15281231a35074d4c9b89e419e84431
+      size: 160743
+    - path: models/vectorizer.pkl
+      hash: md5
+      md5: 3e888c2449f91a7263f2a70dccd0d13f
+      size: 788289

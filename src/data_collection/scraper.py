@@ -164,11 +164,58 @@ class PlayStoreReviewScraper:
             logger.error(f"Error saat cleaning data: {str(e)}")
             raise
     
+    def load_existing_review_ids(self, filepath: str = 'data/raw/reviews.csv') -> set:
+        """
+        Load existing review IDs dari file CSV
+        
+        Args:
+            filepath: Path ke file CSV yang berisi review
+        
+        Returns:
+            Set berisi review_id yang sudah ada
+        """
+        try:
+            if os.path.exists(filepath):
+                df_existing = pd.read_csv(filepath)
+                if 'review_id' in df_existing.columns:
+                    existing_ids = set(df_existing['review_id'].tolist())
+                    logger.info(f"Loaded {len(existing_ids)} existing review IDs")
+                    return existing_ids
+            logger.info("No existing reviews found, starting fresh")
+            return set()
+        except Exception as e:
+            logger.warning(f"Error loading existing reviews: {str(e)}")
+            return set()
+    
+    def filter_new_reviews(self, df: pd.DataFrame, existing_ids: set) -> pd.DataFrame:
+        """
+        Filter hanya review yang belum pernah diambil
+        
+        Args:
+            df: DataFrame hasil scraping
+            existing_ids: Set berisi review_id yang sudah ada
+        
+        Returns:
+            DataFrame berisi hanya review baru
+        """
+        try:
+            if 'review_id' not in df.columns:
+                logger.warning("Column review_id not found, returning all reviews")
+                return df
+            
+            df_new = df[~df['review_id'].isin(existing_ids)].copy()
+            logger.info(f"Found {len(df_new)} new reviews out of {len(df)} scraped")
+            return df_new
+        except Exception as e:
+            logger.error(f"Error filtering reviews: {str(e)}")
+            return df
+    
     def save_data(
         self, 
         df: pd.DataFrame, 
         output_dir: str = 'data/raw',
-        filename: str = None
+        filename: str = None,
+        append: bool = True
     ) -> str:
         """
         Simpan data ke CSV
@@ -177,6 +224,7 @@ class PlayStoreReviewScraper:
             df: DataFrame yang akan disimpan
             output_dir: Directory output
             filename: Nama file (jika None, akan generate otomatis)
+            append: Jika True, append ke file existing; jika False, overwrite
         
         Returns:
             Path file yang disimpan
@@ -192,14 +240,28 @@ class PlayStoreReviewScraper:
             
             filepath = os.path.join(output_dir, filename)
             
-            # Save ke CSV
+            # Save ke CSV with timestamp
             df.to_csv(filepath, index=False, encoding='utf-8')
             logger.info(f"Data berhasil disimpan ke: {filepath}")
             
             # Also save as reviews.csv (untuk DVC pipeline)
             main_filepath = os.path.join(output_dir, 'reviews.csv')
-            df.to_csv(main_filepath, index=False, encoding='utf-8')
-            logger.info(f"Data juga disimpan ke: {main_filepath}")
+            
+            if append and os.path.exists(main_filepath):
+                # Append mode: load existing, combine, remove duplicates
+                df_existing = pd.read_csv(main_filepath)
+                df_combined = pd.concat([df_existing, df], ignore_index=True)
+                # Remove duplicates based on review_id
+                df_combined = df_combined.drop_duplicates(subset=['review_id'], keep='last')
+                # Convert review_date to datetime untuk sorting
+                df_combined['review_date'] = pd.to_datetime(df_combined['review_date'], errors='coerce')
+                df_combined = df_combined.sort_values('review_date', ascending=False)
+                df_combined.to_csv(main_filepath, index=False, encoding='utf-8')
+                logger.info(f"Data di-append ke: {main_filepath} (Total: {len(df_combined)} reviews)")
+            else:
+                # Overwrite mode atau file belum ada
+                df.to_csv(main_filepath, index=False, encoding='utf-8')
+                logger.info(f"Data disimpan ke: {main_filepath} (Total: {len(df)} reviews)")
             
             return filepath
             
@@ -264,20 +326,75 @@ def main():
     logger.info(f"Aplikasi: {app_info['title']}")
     logger.info(f"Rating: {app_info['score']} ({app_info['ratings']} reviews)")
     
-    # Scrape reviews
-    df_reviews = scraper.scrape_reviews(
-        max_reviews=scraping_params['max_reviews'],
-        sort_by=Sort.NEWEST
-    )
+    # Load existing review IDs
+    existing_ids = scraper.load_existing_review_ids()
+    logger.info(f"Review yang sudah tersimpan: {len(existing_ids)}")
+    
+    # Scrape reviews per rating untuk mendapatkan lebih banyak data
+    all_reviews = []
+    ratings_to_scrape = [5, 4, 3, 2, 1]  # Scrape dari rating tinggi ke rendah
+    
+    for rating in ratings_to_scrape:
+        logger.info(f"\n{'='*50}")
+        logger.info(f"Scraping reviews dengan rating: {rating} ⭐")
+        logger.info(f"{'='*50}")
+        
+        try:
+            # Ambil lebih banyak review per rating (1000 per rating)
+            max_per_rating = 1000  # Fixed: 1000 review per rating
+            df_reviews = scraper.scrape_reviews(
+                max_reviews=max_per_rating,
+                sort_by=Sort.NEWEST,
+                filter_score_with=rating
+            )
+            
+            if not df_reviews.empty:
+                all_reviews.append(df_reviews)
+                logger.info(f"✓ Berhasil scraping {len(df_reviews)} reviews untuk rating {rating}")
+            else:
+                logger.info(f"✗ Tidak ada review untuk rating {rating}")
+                
+        except Exception as e:
+            logger.warning(f"Error scraping rating {rating}: {str(e)}")
+            continue
+    
+    # Gabungkan semua reviews
+    if all_reviews:
+        df_combined = pd.concat(all_reviews, ignore_index=True)
+        logger.info(f"\n{'='*50}")
+        logger.info(f"Total reviews dari semua rating: {len(df_combined)}")
+        logger.info(f"{'='*50}")
+    else:
+        logger.error("Tidak ada review yang berhasil di-scrape")
+        return
     
     # Clean data
-    df_clean = scraper.clean_dataframe(df_reviews)
+    df_clean = scraper.clean_dataframe(df_combined)
     
-    # Save data
-    scraper.save_data(df_clean, filename='reviews.csv')
+    # Remove duplicates berdasarkan review_id
+    df_clean = df_clean.drop_duplicates(subset=['review_id'], keep='first')
+    logger.info(f"Setelah deduplikasi: {len(df_clean)} reviews unik")
     
-    # Save metrics
-    scraper.save_metrics(df_clean)
+    # Filter hanya review baru
+    df_new = scraper.filter_new_reviews(df_clean, existing_ids)
+    
+    if len(df_new) == 0:
+        logger.info("Tidak ada review baru yang ditemukan")
+    else:
+        logger.info(f"Ditemukan {len(df_new)} review baru")
+        
+        # Save data (append mode)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        scraper.save_data(df_new, filename=f'reviews_{timestamp}.csv', append=True)
+        
+        # Save metrics untuk review baru
+        scraper.save_metrics(df_new)
+    
+    # Load total reviews untuk info
+    total_reviews_path = 'data/raw/reviews.csv'
+    if os.path.exists(total_reviews_path):
+        df_total = pd.read_csv(total_reviews_path)
+        logger.info(f"Total review tersimpan sekarang: {len(df_total)}")
     
     logger.info("Scraping selesai!")
 

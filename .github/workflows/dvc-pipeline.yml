@@ -1,4 +1,4 @@
-﻿name: DVC Pipeline & Model Training
+name: DVC Pipeline & Model Training
 
 on:
   push:
@@ -69,16 +69,12 @@ jobs:
         if [ ! -f data/raw/reviews.csv ]; then
           echo "Creating sample data for CI/CD..."
           mkdir -p data/raw
-          python -c "
-import pandas as pd
-df = pd.DataFrame({
-    'review_id': ['r1', 'r2', 'r3', 'r4', 'r5'],
-    'review_text': ['Aplikasi sangat bagus', 'Buruk sekali', 'Cukup baik', 'Tidak memuaskan', 'Excellent app'],
-    'rating': [5, 1, 4, 2, 5],
-    'date': ['2024-01-01']*5
-})
-df.to_csv('data/raw/reviews.csv', index=False)
-          "
+          echo "review_id,review_text,rating,date" > data/raw/reviews.csv
+          echo "r1,Aplikasi sangat bagus,5,2024-01-01" >> data/raw/reviews.csv
+          echo "r2,Buruk sekali,1,2024-01-01" >> data/raw/reviews.csv
+          echo "r3,Cukup baik,4,2024-01-01" >> data/raw/reviews.csv
+          echo "r4,Tidak memuaskan,2,2024-01-01" >> data/raw/reviews.csv
+          echo "r5,Excellent app,5,2024-01-01" >> data/raw/reviews.csv
         fi
         
     - name: Run preprocessing

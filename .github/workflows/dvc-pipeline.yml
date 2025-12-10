@@ -10,6 +10,15 @@ on:
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
+    inputs:
+      run_training:
+        description: 'Run model training'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 env:
   PYTHON_VERSION: '3.10'

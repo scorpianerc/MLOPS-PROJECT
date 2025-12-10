@@ -52,7 +52,7 @@ jobs:
     - name: Setup DVC
       run: |
         pip install --upgrade pip setuptools wheel
-        pip install "dvc<3.50.0" "dvc-objects<5.0.0"
+        pip install "dvc==3.48.4" "dvc-objects==4.3.1"
         dvc pull -v || echo "No DVC data to pull"
         
     - name: Check data availability

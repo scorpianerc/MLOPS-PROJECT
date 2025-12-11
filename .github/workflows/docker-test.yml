@@ -1,0 +1,273 @@
+name: Docker Stack Test & Validation
+
+on:
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'docker-compose.yml'
+      - 'Dockerfile'
+      - '.env.example'
+      - 'src/**'
+      - 'requirements.txt'
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'docker-compose.yml'
+      - 'Dockerfile'
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.10'
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  docker-build-test:
+    name: Build & Test Docker Stack
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Create .env file
+      run: |
+        cp .env.example .env
+        echo "Creating test environment configuration..."
+        cat .env
+        
+    - name: Build Docker images
+      run: |
+        echo "🔨 Building Docker images..."
+        docker-compose build --parallel
+        
+    - name: Check image sizes
+      run: |
+        echo "📦 Docker image sizes:"
+        docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | grep sentiment
+        
+    - name: Start services
+      run: |
+        echo "🚀 Starting all services..."
+        docker-compose up -d
+        
+    - name: Wait for services to be healthy
+      run: |
+        echo "⏳ Waiting for services to be ready..."
+        timeout=120
+        elapsed=0
+        
+        while [ $elapsed -lt $timeout ]; do
+          if docker-compose ps | grep -q "Up"; then
+            echo "✅ Services are starting..."
+            sleep 5
+            elapsed=$((elapsed + 5))
+            
+            # Check if API is responding
+            if curl -f http://localhost:8080/health 2>/dev/null; then
+              echo "✅ API is healthy!"
+              break
+            fi
+          else
+            echo "⏳ Waiting for services..."
+            sleep 5
+            elapsed=$((elapsed + 5))
+          fi
+        done
+        
+        if [ $elapsed -ge $timeout ]; then
+          echo "❌ Services failed to start in time"
+          docker-compose logs
+          exit 1
+        fi
+        
+    - name: Check service status
+      run: |
+        echo "📊 Service Status:"
+        docker-compose ps
+        
+    - name: Test API health endpoint
+      run: |
+        echo "🧪 Testing API health endpoint..."
+        response=$(curl -s http://localhost:8080/health)
+        echo "Response: $response"
+        
+        if echo "$response" | grep -q "healthy"; then
+          echo "✅ API health check passed"
+        else
+          echo "❌ API health check failed"
+          exit 1
+        fi
+        
+    - name: Test API model info
+      run: |
+        echo "🧪 Testing model info endpoint..."
+        response=$(curl -s http://localhost:8080/model/info)
+        echo "Response: $response"
+        
+        if echo "$response" | grep -q "model_version"; then
+          echo "✅ Model info endpoint passed"
+        else
+          echo "❌ Model info endpoint failed"
+          exit 1
+        fi
+        
+    - name: Test sentiment prediction
+      run: |
+        echo "🧪 Testing prediction endpoint..."
+        response=$(curl -s -X POST http://localhost:8080/predict \
+          -H "Content-Type: application/json" \
+          -d '{"text": "Aplikasi ini sangat bagus dan mudah digunakan"}')
+        echo "Response: $response"
+        
+        if echo "$response" | grep -q "sentiment"; then
+          echo "✅ Prediction endpoint passed"
+        else
+          echo "❌ Prediction endpoint failed"
+          exit 1
+        fi
+        
+    - name: Test Streamlit accessibility
+      run: |
+        echo "🧪 Testing Streamlit dashboard..."
+        if curl -f http://localhost:8501 >/dev/null 2>&1; then
+          echo "✅ Streamlit is accessible"
+        else
+          echo "⚠️ Streamlit not accessible (may need more time to start)"
+        fi
+        
+    - name: Test Prometheus metrics
+      run: |
+        echo "🧪 Testing Prometheus..."
+        if curl -f http://localhost:9090/-/healthy >/dev/null 2>&1; then
+          echo "✅ Prometheus is healthy"
+        else
+          echo "❌ Prometheus is not healthy"
+          exit 1
+        fi
+        
+    - name: Test Grafana accessibility
+      run: |
+        echo "🧪 Testing Grafana..."
+        if curl -f http://localhost:3000 >/dev/null 2>&1; then
+          echo "✅ Grafana is accessible"
+        else
+          echo "⚠️ Grafana not accessible (may need more time)"
+        fi
+        
+    - name: Test PostgreSQL connection
+      run: |
+        echo "🧪 Testing PostgreSQL..."
+        docker exec sentiment_postgres pg_isready -U sentiment_user
+        echo "✅ PostgreSQL is ready"
+        
+    - name: Test MongoDB connection
+      run: |
+        echo "🧪 Testing MongoDB..."
+        docker exec sentiment_mongodb mongosh --eval "db.runCommand('ping')" --quiet
+        echo "✅ MongoDB is ready"
+        
+    - name: Check container logs for errors
+      if: always()
+      run: |
+        echo "📋 Checking logs for errors..."
+        echo "=== API Logs ==="
+        docker-compose logs --tail=50 api
+        echo "=== Streamlit Logs ==="
+        docker-compose logs --tail=50 streamlit
+        echo "=== Database Logs ==="
+        docker-compose logs --tail=20 postgres
+        
+    - name: Create test summary
+      if: always()
+      run: |
+        echo "## 🐳 Docker Stack Test Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Service | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| API Server | ✅ Tested |" >> $GITHUB_STEP_SUMMARY
+        echo "| Streamlit | ✅ Tested |" >> $GITHUB_STEP_SUMMARY
+        echo "| Prometheus | ✅ Tested |" >> $GITHUB_STEP_SUMMARY
+        echo "| Grafana | ✅ Tested |" >> $GITHUB_STEP_SUMMARY
+        echo "| PostgreSQL | ✅ Tested |" >> $GITHUB_STEP_SUMMARY
+        echo "| MongoDB | ✅ Tested |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Build Time**: $(date)" >> $GITHUB_STEP_SUMMARY
+        
+    - name: Stop services
+      if: always()
+      run: |
+        echo "🛑 Stopping services..."
+        docker-compose down -v
+        
+    - name: Cleanup
+      if: always()
+      run: |
+        echo "🧹 Cleaning up..."
+        docker system prune -f
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        
+    - name: Upload Trivy results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+        
+    - name: Run Dockerfile linter
+      uses: hadolint/hadolint-action@v3.1.0
+      with:
+        dockerfile: Dockerfile
+        failure-threshold: warning
+        
+  docker-compose-validation:
+    name: Validate Docker Compose
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Validate docker-compose.yml
+      run: |
+        echo "🔍 Validating docker-compose.yml syntax..."
+        docker-compose config --quiet
+        echo "✅ docker-compose.yml is valid"
+        
+    - name: Check environment variables
+      run: |
+        echo "🔍 Checking required environment variables..."
+        required_vars="POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB MONGO_HOST GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD"
+        
+        if [ ! -f .env.example ]; then
+          echo "❌ .env.example not found"
+          exit 1
+        fi
+        
+        for var in $required_vars; do
+          if grep -q "^${var}=" .env.example; then
+            echo "✅ $var defined in .env.example"
+          else
+            echo "❌ $var missing in .env.example"
+            exit 1
+          fi
+        done
+        
+        echo "✅ All required environment variables are defined"

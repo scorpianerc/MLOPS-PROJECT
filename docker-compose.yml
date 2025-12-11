@@ -103,9 +103,18 @@ services:
   exporter:
     build: .
     container_name: sentiment_exporter
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
     volumes:
       - ./data:/app/data
       - ./models:/app/models
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - sentiment_network
     restart: unless-stopped
@@ -117,15 +126,48 @@ services:
   streamlit:
     build: .
     container_name: sentiment_streamlit
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
     volumes:
       - ./data:/app/data
       - ./models:/app/models
+      - ./.env:/app/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - sentiment_network
     restart: unless-stopped
     command: streamlit run app_streamlit.py --server.port=8501 --server.address=0.0.0.0
     ports:
       - "8501:8501"
+
+  # FastAPI Model Serving - REST API
+  api:
+    build: .
+    container_name: sentiment_api
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    volumes:
+      - ./models:/app/models
+      - ./.env:/app/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sentiment_network
+    restart: unless-stopped
+    command: python -m uvicorn src.api.api_server:app --host 0.0.0.0 --port 8080
+    ports:
+      - "8080:8080"
 
 volumes:
   postgres_data:

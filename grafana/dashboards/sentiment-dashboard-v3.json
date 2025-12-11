@@ -1,0 +1,806 @@
+{
+  "title": "Sentiment Analysis Dashboard",
+  "uid": "sentiment-dashboard-v3",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Total Reviews",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT COUNT(*) as value FROM reviews",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Predicted Reviews",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT COUNT(*) as value FROM reviews WHERE sentiment IS NOT NULL",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Average Rating",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT ROUND(AVG(rating)::numeric, 2) as value FROM reviews",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 2,
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Unpredicted Reviews",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT COUNT(*) as value FROM reviews WHERE sentiment IS NULL",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "red",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Positive Reviews",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 6
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT COUNT(*) as value FROM reviews WHERE sentiment = 'positive'",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Negative Reviews",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 6
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT COUNT(*) as value FROM reviews WHERE sentiment = 'negative'",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "red",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Neutral Reviews",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 6
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT COUNT(*) as value FROM reviews WHERE sentiment = 'neutral'",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "yellow",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Sentiment Distribution",
+      "type": "piechart",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT sentiment as metric, COUNT(*) as value FROM reviews WHERE sentiment IS NOT NULL GROUP BY sentiment",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "pieType": "pie"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            }
+          },
+          "mappings": []
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Test Accuracy",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 12,
+        "y": 6
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT accuracy as value FROM model_metrics ORDER BY created_at DESC LIMIT 1",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 4,
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Train Accuracy",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 12,
+        "y": 10
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT train_accuracy as value FROM model_metrics ORDER BY created_at DESC LIMIT 1",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 4,
+          "color": {
+            "fixedColor": "light-blue",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Test Precision",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 15,
+        "y": 6
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT precision_score as value FROM model_metrics ORDER BY created_at DESC LIMIT 1",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 4,
+          "color": {
+            "fixedColor": "purple",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "Train Precision",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 15,
+        "y": 10
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT train_precision as value FROM model_metrics ORDER BY created_at DESC LIMIT 1",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 4,
+          "color": {
+            "fixedColor": "light-purple",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Recall",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 18,
+        "y": 6
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT recall_score as value FROM model_metrics ORDER BY created_at DESC LIMIT 1",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "color": {
+            "fixedColor": "orange",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "F1 Score",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 21,
+        "y": 6
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT f1_score as value FROM model_metrics ORDER BY created_at DESC LIMIT 1",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Train Accuracy",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 12,
+        "y": 10
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT train_accuracy as value FROM model_metrics ORDER BY created_at DESC LIMIT 1",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 4,
+          "color": {
+            "fixedColor": "light-blue",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "Train Precision",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 15,
+        "y": 10
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT train_precision as value FROM model_metrics ORDER BY created_at DESC LIMIT 1",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 4,
+          "color": {
+            "fixedColor": "light-purple",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "Train Recall",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 18,
+        "y": 10
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT train_recall as value FROM model_metrics ORDER BY created_at DESC LIMIT 1",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 4,
+          "color": {
+            "fixedColor": "light-orange",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 17,
+      "title": "Train F1 Score",
+      "type": "stat",
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 21,
+        "y": 10
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT train_f1 as value FROM model_metrics ORDER BY created_at DESC LIMIT 1",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 4,
+          "color": {
+            "fixedColor": "light-green",
+            "mode": "fixed"
+          }
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Rating Distribution",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "PCC52D03280B7034C"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "PCC52D03280B7034C"
+          },
+          "rawSql": "SELECT CAST(rating as TEXT) as metric, COUNT(*) as value FROM reviews GROUP BY rating ORDER BY rating",
+          "format": "table"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "red"
+              },
+              {
+                "value": 500,
+                "color": "yellow"
+              },
+              {
+                "value": 1000,
+                "color": "green"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

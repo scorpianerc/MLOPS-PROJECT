@@ -18,6 +18,7 @@ from src.prediction.predict import PredictionPipeline
 from google_play_scraper import Sort
 import yaml
 from dotenv import load_dotenv
+import subprocess
 
 load_dotenv()
 
@@ -74,6 +75,19 @@ class TaskScheduler:
             scraper.save_data(df_clean, filename='reviews.csv')
             scraper.save_metrics(df_clean)
             
+            # Run load_to_db.py untuk sync CSV ke database
+            logger.info("Running load_to_db.py to sync CSV data...")
+            result = subprocess.run(
+                ['python', 'src/data_collection/load_to_db.py'],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                logger.info("CSV data synced successfully")
+                logger.info(result.stdout)
+            else:
+                logger.error(f"Error syncing CSV: {result.stderr}")
+            
             logger.info("Scraping task completed successfully!")
             
         except Exception as e:
@@ -86,8 +100,18 @@ class TaskScheduler:
             logger.info("Starting prediction task...")
             logger.info("=" * 50)
             
-            pipeline = PredictionPipeline()
-            pipeline.run(batch_size=100)
+            # Run batch_predict.py untuk prediksi semua unpredicted reviews
+            logger.info("Running batch_predict.py to predict sentiments...")
+            result = subprocess.run(
+                ['python', 'src/monitoring/batch_predict.py'],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                logger.info("Predictions completed successfully")
+                logger.info(result.stdout)
+            else:
+                logger.error(f"Error in predictions: {result.stderr}")
             
             logger.info("Prediction task completed successfully!")
             

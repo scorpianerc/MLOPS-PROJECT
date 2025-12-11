@@ -1,7 +1,7 @@
 """
 Streamlit Dashboard untuk Sentiment Analysis MLOps  
 Modern Glassmorphism Design with Monochrome Theme — Enhanced UX/UI
-Fixed: All charts now use full width within tabs
+Connected to PostgreSQL Database - Responsive Design
 """
 
 import streamlit as st
@@ -16,6 +16,12 @@ from datetime import datetime, timedelta
 import os
 import math
 import time
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Try to import torch and transformers for BERT model
 try:
@@ -32,6 +38,29 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Database connection helper
+@st.cache_resource
+def get_db_connection():
+    """Get PostgreSQL database connection (cached)"""
+    try:
+        # Auto-detect if running in Docker or locally
+        # In Docker: use 'postgres' (service name)
+        # Locally: use 'localhost'
+        db_host = os.getenv('POSTGRES_HOST', 'localhost')
+        
+        conn = psycopg2.connect(
+            host=db_host,
+            port=os.getenv('POSTGRES_PORT', '5432'),
+            database=os.getenv('POSTGRES_DB', 'sentiment_db'),
+            user=os.getenv('POSTGRES_USER', 'sentiment_user'),
+            password=os.getenv('POSTGRES_PASSWORD', 'password')
+        )
+        return conn
+    except Exception as e:
+        st.error(f"❌ Database connection error: {e}")
+        st.info(f"Trying to connect to: {db_host}:5432")
+        return None
 
 # Modern Glassmorphism CSS with Monochrome — Enhanced
 st.markdown("""
@@ -55,10 +84,31 @@ st.markdown("""
         -webkit-backdrop-filter: blur(20px);
         border-right: 1px solid rgba(255, 255, 255, 0.1);
         padding: 1.5rem 1rem;
+        min-width: 250px;
     }
 
     [data-testid="stSidebar"] * {
         color: rgba(255, 255, 255, 0.9) !important;
+    }
+    
+    /* Sidebar responsive */
+    [data-testid="stSidebar"][aria-expanded="false"] {
+        min-width: 0;
+        width: 0;
+    }
+    
+    /* Sidebar buttons responsive */
+    [data-testid="stSidebar"] button {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+    
+    [data-testid="stSidebar"] .stButton button {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+        min-height: 2.5rem;
     }
 
     /* Main container */
@@ -237,13 +287,71 @@ st.markdown("""
     /* Responsive grid */
     @media (max-width: 768px) {
         .main .block-container {
-            margin: 0.8rem;
-            padding: 1rem;
+            margin: 0.5rem;
+            padding: 0.8rem;
         }
-        h1 { font-size: 1.8rem !important; }
-        h2 { font-size: 1.3rem !important; }
-        .stTabs [data-baseweb="tab"] { height: 42px; font-size: 0.85rem; padding: 0 14px; }
-        div[data-testid="metric-container"] { padding: 1.2rem 0.8rem; }
+        h1 { font-size: 1.6rem !important; }
+        h2 { font-size: 1.2rem !important; }
+        h3 { font-size: 1rem !important; }
+        .stTabs [data-baseweb="tab"] { 
+            height: 40px; 
+            font-size: 0.8rem; 
+            padding: 0 10px; 
+        }
+        div[data-testid="metric-container"] { 
+            padding: 1rem 0.6rem; 
+            margin-bottom: 0.8rem;
+        }
+        [data-testid="stMetricValue"] {
+            font-size: 1.6rem !important;
+        }
+        .review-card {
+            padding: 1rem;
+            margin-bottom: 0.8rem;
+        }
+        
+        /* Sidebar responsive - prevent button overflow */
+        [data-testid="stSidebar"] {
+            padding: 1rem 0.5rem;
+            min-width: 200px !important;
+        }
+        
+        [data-testid="stSidebar"] .stButton button {
+            padding: 0.4rem 0.6rem;
+            font-size: 0.85rem;
+            white-space: normal;
+            word-wrap: break-word;
+            height: auto;
+            min-height: 2rem;
+        }
+        
+        [data-testid="stSidebar"] .stRadio,
+        [data-testid="stSidebar"] .stMultiSelect,
+        [data-testid="stSidebar"] .stSelectbox {
+            font-size: 0.85rem;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .main .block-container {
+            margin: 0.3rem;
+            padding: 0.5rem;
+        }
+        h1 { font-size: 1.4rem !important; }
+        [data-testid="stMetricValue"] {
+            font-size: 1.4rem !important;
+        }
+        
+        /* Sidebar extra small screens */
+        [data-testid="stSidebar"] {
+            min-width: 180px !important;
+            padding: 0.8rem 0.4rem;
+        }
+        
+        [data-testid="stSidebar"] .stButton button {
+            font-size: 0.8rem;
+            padding: 0.3rem 0.5rem;
+        }
     }
 
     /* Hide Streamlit elements */
@@ -274,58 +382,111 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Load data
-@st.cache_data(ttl=30)
+# Load data from PostgreSQL - FORCE FRESH CONNECTION
 def load_data():
+    """Load reviews data from PostgreSQL database"""
     try:
-        df = pd.read_csv('data/processed/processed_reviews.csv')
+        # Auto-detect host: 'postgres' for Docker, 'localhost' for local
+        db_host = os.getenv('POSTGRES_HOST', 'localhost')
+        
+        # Create NEW connection (don't use cached)
+        conn = psycopg2.connect(
+            host=db_host,
+            port=os.getenv('POSTGRES_PORT', '5432'),
+            database=os.getenv('POSTGRES_DB', 'sentiment_db'),
+            user=os.getenv('POSTGRES_USER', 'sentiment_user'),
+            password=os.getenv('POSTGRES_PASSWORD', 'password')
+        )
+        
+        query = """
+        SELECT 
+            id,
+            review_text,
+            rating,
+            review_date,
+            sentiment,
+            sentiment_score as confidence,
+            scraped_at as created_at
+        FROM reviews
+        ORDER BY scraped_at DESC
+        """
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        
+        # Rename sentiment column to sentiment_label for consistency
+        if 'sentiment' in df.columns:
+            df['sentiment_label'] = df['sentiment']
+        
         return df
     except Exception as e:
-        st.error(f"Error loading data: {e}")
+        st.error(f"❌ Database Connection Error: {str(e)}")
+        st.info("Make sure PostgreSQL container is running: `docker ps`")
         return pd.DataFrame()
 
-@st.cache_data(ttl=30)
 def load_metrics():
-    """Load metrics from JSON file with minimal caching"""
-    # Try to load BERT metrics first (better model)
-    bert_metrics_path = 'models/bert_metrics.json'
-    regular_metrics_path = 'models/metrics.json'
-    
+    """Load metrics from PostgreSQL database (model_metrics table)"""
     try:
-        if os.path.exists(bert_metrics_path):
-            with open(bert_metrics_path, 'r') as f:
-                metrics_data = json.load(f)
-            metrics_data['model_type'] = 'IndoBERT'
-            # BERT metrics only have test metrics
-            if 'accuracy' in metrics_data:
-                metrics_data['test_accuracy'] = metrics_data['accuracy']
-                metrics_data['test_f1'] = metrics_data['f1']
-                metrics_data['test_precision'] = metrics_data['precision']
-                metrics_data['test_recall'] = metrics_data['recall']
-                # Set train metrics same as test (or load from training logs if available)
-                metrics_data['train_accuracy'] = metrics_data.get('train_accuracy', metrics_data['accuracy'])
-                metrics_data['train_f1'] = metrics_data.get('train_f1', metrics_data['f1'])
-                metrics_data['train_precision'] = metrics_data.get('train_precision', metrics_data['precision'])
-                metrics_data['train_recall'] = metrics_data.get('train_recall', metrics_data['recall'])
-            return metrics_data
-        elif os.path.exists(regular_metrics_path):
-            with open(regular_metrics_path, 'r') as f:
-                metrics_data = json.load(f)
-            metrics_data['model_type'] = 'Logistic Regression'
-            required_keys = ['test_accuracy', 'test_f1', 'test_precision', 'test_recall', 
-                           'train_accuracy', 'train_f1', 'train_precision', 'train_recall']
-            for key in required_keys:
-                if key not in metrics_data:
-                    metrics_data[key] = 0
-            return metrics_data
+        # Auto-detect host: 'postgres' for Docker, 'localhost' for local
+        db_host = os.getenv('POSTGRES_HOST', 'localhost')
+        
+        # Create NEW connection
+        conn = psycopg2.connect(
+            host=db_host,
+            port=os.getenv('POSTGRES_PORT', '5432'),
+            database=os.getenv('POSTGRES_DB', 'sentiment_db'),
+            user=os.getenv('POSTGRES_USER', 'sentiment_user'),
+            password=os.getenv('POSTGRES_PASSWORD', 'password')
+        )
+        
+        query = """
+        SELECT 
+            model_name,
+            accuracy,
+            precision_score,
+            recall_score,
+            f1_score,
+            train_accuracy,
+            train_precision,
+            train_recall,
+            train_f1,
+            created_at
+        FROM model_metrics
+        ORDER BY created_at DESC
+        LIMIT 1
+        """
+        
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(query)
+        result = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if result:
+            return {
+                'model_type': result.get('model_name', 'BERT Model'),
+                'test_accuracy': float(result.get('accuracy', 0) or 0),
+                'test_precision': float(result.get('precision_score', 0) or 0),
+                'test_recall': float(result.get('recall_score', 0) or 0),
+                'test_f1': float(result.get('f1_score', 0) or 0),
+                'train_accuracy': float(result.get('train_accuracy', 0) or 0),
+                'train_precision': float(result.get('train_precision', 0) or 0),
+                'train_recall': float(result.get('train_recall', 0) or 0),
+                'train_f1': float(result.get('train_f1', 0) or 0),
+                'created_at': str(result.get('created_at', ''))
+            }
+        else:
+            return {
+                'test_accuracy': 0, 'test_f1': 0, 'test_precision': 0, 'test_recall': 0,
+                'train_accuracy': 0, 'train_f1': 0, 'train_precision': 0, 'train_recall': 0,
+                'model_type': 'No Data'
+            }
     except Exception as e:
-        pass
-    
-    return {
-        'test_accuracy': 0, 'test_f1': 0, 'test_precision': 0, 'test_recall': 0,
-        'train_accuracy': 0, 'train_f1': 0, 'train_precision': 0, 'train_recall': 0,
-        'model_type': 'Unknown'
-    }
+        st.error(f"❌ Metrics Error: {str(e)}")
+        return {
+            'test_accuracy': 0, 'test_f1': 0, 'test_precision': 0, 'test_recall': 0,
+            'train_accuracy': 0, 'train_f1': 0, 'train_precision': 0, 'train_recall': 0,
+            'model_type': 'Error'
+        }
 
 @st.cache_resource
 def load_bert_model():
@@ -393,41 +554,43 @@ if 'page_reviews' not in st.session_state:
 if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = datetime.now()
 
-# Main title
-st.markdown("<h1>📊 Sentiment Analysis Dashboard</h1>", unsafe_allow_html=True)
+# Main title - Remove emoji
+st.markdown("<h1>Sentiment Analysis Dashboard</h1>", unsafe_allow_html=True)
+
+# Force clear cache on first load
+if 'first_load' not in st.session_state:
+    st.cache_data.clear()
+    st.session_state.first_load = True
 
 # Load data & metrics
-with st.spinner("Loading data and metrics..."):
+with st.spinner("Loading data from PostgreSQL..."):
     df = load_data()
     metrics = load_metrics()
     st.session_state.data_loaded = True
     st.session_state.last_refresh = datetime.now()
 
-st.markdown("<p style='text-align: center; color: rgba(255,255,255,0.6); margin-bottom: 2rem;'>MLOps Pipeline for Pintu App Reviews</p>", unsafe_allow_html=True)
-
-# Debug: Show metrics loading status in sidebar
-st.sidebar.markdown("### 🔍 Debug Info")
-if metrics and metrics.get('test_accuracy', 0) > 0:
-    st.sidebar.success("✅ Metrics loaded")
-else:
-    st.sidebar.error("❌ Metrics NOT loaded!")
-    st.sidebar.info("Check models/metrics.json")
+st.markdown("<p style='text-align: center; color: rgba(255,255,255,0.6); margin-bottom: 2rem;'>MLOps Pipeline for Pintu App Reviews | Live PostgreSQL Data</p>", unsafe_allow_html=True)
 
 if df.empty:
     st.warning("No data available. Please run the scraping process first.")
     st.stop()
 
 # Sidebar filters
-st.sidebar.markdown("## 🎯 Filters")
+st.sidebar.markdown("## Filters")
 
-# Refresh button
-if st.sidebar.button("🔄 Refresh Data", use_container_width=True):
+# Refresh button - Fixed - Full width vertically stacked
+if st.sidebar.button("↻ Refresh Data", use_container_width=True, key="refresh_btn"):
+    # Clear cache
     st.cache_data.clear()
+    st.cache_resource.clear()
     st.session_state.last_refresh = datetime.now()
+    st.success("Data refreshed successfully!")
+    time.sleep(0.5)
     st.rerun()
 
-st.sidebar.markdown("### 💾 Export Format")
-export_format = st.sidebar.radio("Choose format:", ["CSV", "JSON"], horizontal=True)
+st.sidebar.markdown("### Export Format")
+# Vertical stacked radio buttons for small sidebar
+export_format = st.sidebar.radio("Choose format:", ["CSV", "JSON"], horizontal=False)
 
 sentiment_filter = st.sidebar.multiselect(
     "Sentiment",
@@ -449,77 +612,64 @@ if sentiment_filter and 'sentiment_label' in df.columns:
 if 'rating' in df.columns:
     filtered_df = filtered_df[(filtered_df['rating'] >= rating_range[0]) & (filtered_df['rating'] <= rating_range[1])]
 
-# Export buttons
+# Export buttons - Stacked vertically for better responsive
 if not filtered_df.empty:
-    col_exp1, col_exp2 = st.sidebar.columns(2)
-    with col_exp1:
-        if export_format == "CSV":
-            csv_data = filtered_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                "📥 CSV",
-                data=csv_data,
-                file_name=f"pintu_sentiment_{datetime.now():%Y%m%d}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        else:
-            st.button("📥 CSV", disabled=True, use_container_width=True)
-    with col_exp2:
-        if export_format == "JSON":
-            json_data = filtered_df.to_json(orient='records', indent=2)
-            st.download_button(
-                "📥 JSON",
-                data=json_data,
-                file_name=f"pintu_sentiment_{datetime.now():%Y%m%d}.json",
-                mime="application/json",
-                use_container_width=True
-            )
-        else:
-            st.button("📥 JSON", disabled=True, use_container_width=True)
+    if export_format == "CSV":
+        csv_data = filtered_df.to_csv(index=False).encode('utf-8')
+        st.sidebar.download_button(
+            "⬇ Download CSV",
+            data=csv_data,
+            file_name=f"pintu_sentiment_{datetime.now():%Y%m%d}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    else:
+        json_data = filtered_df.to_json(orient='records', indent=2)
+        st.sidebar.download_button(
+            "⬇ Download JSON",
+            data=json_data,
+            file_name=f"pintu_sentiment_{datetime.now():%Y%m%d}.json",
+            mime="application/json",
+            use_container_width=True
+        )
 
-# Show last updated timestamp for data file
-data_path = Path('data/processed/processed_reviews.csv')
-if data_path.exists():
-    try:
-        mtime = datetime.fromtimestamp(os.path.getmtime(data_path))
-        st.caption(f"📅 Last data refresh: {mtime:%Y-%m-%d %H:%M:%S}")
-    except Exception:
-        pass
+# Show last refresh timestamp
+if 'last_refresh' in st.session_state:
+    st.sidebar.caption(f"Last refresh: {st.session_state.last_refresh:%H:%M:%S}")
+else:
+    st.sidebar.caption("Last refresh: Now")
 
 # Visualization Section
-st.markdown("## 📈 Analytics")
+st.markdown("## Analytics")
 
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Distribution", "📈 Trends", "📝 Details", "☁️ Insights"])
+tab1, tab2, tab3, tab4 = st.tabs(["◉ Distribution", "▲ Trends", "≡ Details", "◐ Insights"])
 
 with tab1:
     # Key Metrics Cards Row
-    st.markdown("### 📊 Key Metrics")
+    st.markdown("### Key Metrics")
     
-    # Simulate prior metrics for delta (replace with real history if available)
-    prev_accuracy = 0.89
+    # Calculate metrics
+    total_reviews = len(filtered_df)
+    avg_rating = filtered_df['rating'].mean() if 'rating' in filtered_df.columns else 0
     current_accuracy = metrics.get('test_accuracy', 0)
-    accuracy_delta = f"{(current_accuracy - prev_accuracy)*100:+.1f}%" if prev_accuracy > 0 else None
+    f1_score = metrics.get('test_f1', 0)
 
-    # Center the metrics with padding columns
-    col_pad1, col1, col2, col3, col4, col_pad2 = st.columns([0.5, 1, 1, 1, 1, 0.5])
+    # Responsive columns - 4 columns on desktop, 2 on tablet, 1 on mobile
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        total_reviews = len(filtered_df)
         st.metric("Total Reviews", f"{total_reviews:,}")
     with col2:
-        avg_rating = filtered_df['rating'].mean() if 'rating' in filtered_df.columns else 0
-        st.metric("Avg Rating", f"{avg_rating:.1f} ⭐")
+        st.metric("Avg Rating", f"{avg_rating:.1f} ★")
     with col3:
-        st.metric("Model Accuracy", f"{current_accuracy:.1%}", delta=accuracy_delta)
+        st.metric("Model Accuracy", f"{current_accuracy:.1%}")
     with col4:
-        f1_score = metrics.get('test_f1', 0)
-        f1_delta = "+2.1%" if f1_score > 0.85 else None
-        st.metric("F1 Score", f"{f1_score:.1%}", delta=f1_delta)
+        st.metric("F1 Score", f"{f1_score:.1%}")
 
     # Graph Cards - Full Width
-    st.markdown("### 📈 Visual Analytics")
+    st.markdown("### Visual Analytics")
     
     # Sentiment Distribution - Full Width
-    st.markdown("**📊 Sentiment Distribution**")
+    st.markdown("**Sentiment Distribution**")
     if 'sentiment_label' in filtered_df.columns:
         sentiment_counts = filtered_df['sentiment_label'].value_counts()
         color_map = {'positive': '#4CAF50', 'negative': '#F44336', 'neutral': '#9E9E9E'}
@@ -556,7 +706,7 @@ with tab1:
         st.plotly_chart(fig, use_container_width=True)
 
     # Rating Distribution - Full Width
-    st.markdown("**⭐ Rating Distribution**")
+    st.markdown("**★ Rating Distribution**")
     if 'rating' in filtered_df.columns:
         rating_counts = filtered_df['rating'].value_counts().sort_index()
         colors_list = ['#F44336', '#FF9800', '#FFC107', '#8BC34A', '#4CAF50']
@@ -577,7 +727,7 @@ with tab1:
         ])
         fig.update_layout(
             title="",
-            xaxis_title='Rating (⭐)',
+            xaxis_title='Rating (★)',
             yaxis_title='Count',
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
@@ -599,7 +749,7 @@ with tab1:
 
 
 with tab2:
-    st.markdown("### 📈 Reviews Over Time")
+    st.markdown("### Reviews Over Time")
     if 'review_date' in filtered_df.columns:
         filtered_df['review_date'] = pd.to_datetime(filtered_df['review_date'])
         daily_counts = filtered_df.groupby(filtered_df['review_date'].dt.date).size()
@@ -636,7 +786,7 @@ with tab2:
 
 
 with tab3:
-    st.markdown("### 📝 Recent Reviews")
+    st.markdown("### Recent Reviews")
     
     # Pagination controls
     page_size = 8
@@ -646,7 +796,7 @@ with tab3:
     colp1, colp2, colp3 = st.columns([1, 2, 1])
     
     with colp1:
-        if st.button('◀ Prev', key="prev_btn", use_container_width=True):
+        if st.button('← Prev', key="prev_btn", use_container_width=True):
             st.session_state.page_reviews = max(1, st.session_state.page_reviews - 1)
     
     with colp2:
@@ -657,7 +807,7 @@ with tab3:
         )
     
     with colp3:
-        if st.button('Next ▶', key="next_btn", use_container_width=True):
+        if st.button('Next →', key="next_btn", use_container_width=True):
             st.session_state.page_reviews = min(total_pages, st.session_state.page_reviews + 1)
 
     start = (st.session_state.page_reviews - 1) * page_size
@@ -667,12 +817,13 @@ with tab3:
     if page_df.empty:
         st.info('No reviews match the current filters.')
     else:
-        cols = st.columns(2)
+        # Responsive: 2 columns on desktop, 1 on mobile
+        cols = st.columns([1, 1])
         for i, (_, row) in enumerate(page_df.iterrows()):
             sentiment = str(row.get('sentiment_label', 'neutral')).lower()
             rating_val = row.get('rating', 0) or 0
             try:
-                rating_stars = "⭐" * int(max(0, min(5, int(rating_val))))
+                rating_stars = "★" * int(max(0, min(5, int(rating_val))))
             except:
                 rating_stars = ''
             
@@ -707,7 +858,7 @@ with tab3:
 
 
 with tab4:
-    st.markdown("### 🔤 Word Frequency Analysis")
+    st.markdown("### Word Frequency Analysis")
     
     if 'review_text' in filtered_df.columns and not filtered_df.empty:
         all_text = ' '.join(filtered_df['review_text'].dropna().astype(str))
@@ -733,7 +884,7 @@ with tab4:
                 orientation='h',
                 title='Top 20 Most Frequent Words',
                 color='Frequency',
-                color_continuous_scale=['#333333', '#FFFFFF'],
+                color_continuous_scale=['#667eea', '#764ba2', '#f093fb', '#4facfe'],
                 template='plotly_dark'
             )
             fig.update_layout(
@@ -746,7 +897,7 @@ with tab4:
             )
             st.plotly_chart(fig, use_container_width=True)
     
-    st.markdown("### 📅 Sentiment Timeline")
+    st.markdown("### Sentiment Timeline")
     if 'review_date' in filtered_df.columns and 'sentiment_label' in filtered_df.columns:
         filtered_df['review_date'] = pd.to_datetime(filtered_df['review_date'])
         sentiment_timeline = filtered_df.groupby([filtered_df['review_date'].dt.date, 'sentiment_label']).size().reset_index(name='count')
@@ -772,7 +923,7 @@ with tab4:
         )
         st.plotly_chart(fig, use_container_width=True)
     
-    st.markdown("### 🔥 Sentiment vs Rating Heatmap")
+    st.markdown("### Sentiment vs Rating Heatmap")
     if 'rating' in filtered_df.columns and 'sentiment_label' in filtered_df.columns:
         heatmap_data = pd.crosstab(filtered_df['sentiment_label'], filtered_df['rating'])
         
@@ -780,7 +931,7 @@ with tab4:
             z=heatmap_data.values,
             x=heatmap_data.columns,
             y=heatmap_data.index,
-            colorscale='Greys',
+            colorscale=[[0, '#2d3561'], [0.25, '#c05c7e'], [0.5, '#f3826f'], [0.75, '#ffb961'], [1, '#ffd97d']],
             text=heatmap_data.values,
             texttemplate='%{text}',
             textfont={"size": 14, "color": "white"}
@@ -803,10 +954,10 @@ with tab4:
 # Model Performance Section
 if metrics:
     model_type = metrics.get('model_type', 'Unknown')
-    st.markdown(f"## 🎯 Model Performance: **{model_type}**")
+    st.markdown(f"## Model Performance: **{model_type}**")
     
     # Show model badge
-    if model_type == 'IndoBERT':
+    if 'BERT' in model_type.upper() or 'bert' in model_type:
         st.markdown("""
         <div style='
             display: inline-block;
@@ -815,11 +966,11 @@ if metrics:
             border-radius: 20px;
             margin-bottom: 10px;
         '>
-            <span style='color: white; font-weight: bold;'>🤖 State-of-the-art Indonesian BERT Model</span>
+            <span style='color: white; font-weight: bold;'>⚡ State-of-the-art Indonesian BERT Model</span>
         </div>
         """, unsafe_allow_html=True)
     
-    st.markdown("### 📊 Performance Metrics")
+    st.markdown("### Performance Metrics")
     col1, col2, col3, col4 = st.columns(4)
     test_acc = metrics.get('test_accuracy', 0)
     test_prec = metrics.get('test_precision', 0)
@@ -835,7 +986,7 @@ if metrics:
     with col4:
         st.metric("Test Recall", f"{test_rec:.1%}")
 
-    st.markdown("### 📈 Train vs Test Comparison")
+    st.markdown("### Train vs Test Comparison")
 
     perf_metrics = {
         'Metric': ['Accuracy', 'Precision', 'Recall', 'F1 Score'],
@@ -884,15 +1035,14 @@ if metrics:
     )
     st.plotly_chart(fig, use_container_width=True)
     
-    with st.expander("🔍 View Raw Metrics Data"):
+    with st.expander("▼ View Raw Metrics Data"):
         st.json(metrics)
-        model_file = 'bert_metrics.json' if metrics.get('model_type') == 'IndoBERT' else 'metrics.json'
-        st.caption(f"Loaded from `models/{model_file}` | Model: **{metrics.get('model_type', 'Unknown')}**")
+        st.caption(f"Loaded from PostgreSQL `model_metrics` table | Model: **{metrics.get('model_type', 'Unknown')}**")
 
 
 # ================= NEW: TRY IT YOURSELF SECTION =================
 st.markdown("---")
-st.markdown("## 🧪 Try It Yourself: Real-Time Prediction")
+st.markdown("## Try It Yourself: Real-Time Prediction")
 
 if BERT_AVAILABLE and os.path.exists('models/bert_model'):
     # Load BERT model
@@ -914,7 +1064,7 @@ if BERT_AVAILABLE and os.path.exists('models/bert_model'):
         
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            predict_button = st.button("🔮 Predict Sentiment", use_container_width=True)
+            predict_button = st.button("⚡ Predict Sentiment", use_container_width=True)
         
         if predict_button and user_input.strip():
             with st.spinner("Analyzing sentiment..."):

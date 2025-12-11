@@ -4,52 +4,128 @@ __pycache__/
 *.class
 *.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 env/
 venv/
 ENV/
+.venv/
 
 # Jupyter
 .ipynb_checkpoints
 *.ipynb
+notebooks/.ipynb_checkpoints/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*.sublime-*
+.spyderproject
+.spyproject
 
 # OS
 .DS_Store
 Thumbs.db
+*.bak
+*~
 
-# Project specific
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+*.cover
+.cache
+
+# Project specific - Logs & MLflow
 logs/
 mlruns/
 *.log
+*.log.*
 reviews.csv/
 
-# Data (keep structure, ignore content)
+# Data (keep structure, ignore large data files)
 data/raw/*.csv
+data/raw/*.json
+data/raw/*.parquet
 data/processed/*.csv
 data/processed/*.pkl
+data/processed/*.json
+data/predictions/*.csv
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/predictions/.gitkeep
 
-# Models
+# Models (ignore large model files)
 models/*.pkl
+models/*.pth
+models/*.h5
 models/*.json
 models/*.png
+models/*.bin
+models/*.safetensors
+models/*.onnx
+models/*.ckpt
 models/bert_model/
+models/pytorch_model.bin
 !models/.gitkeep
+!models/README.md
 
-# DVC
+# DVC tracked files (managed by DVC)
 /data/raw/reviews.csv
 /data/processed/processed_reviews.csv
 /data/processed/features.pkl
 /models/bert_model
 
-# Docker
+# Docker - ignore volumes and build cache
 .dockerignore
+docker-compose.override.yml
+*.tar
+*.tar.gz
 
-# Environment
+# Docker volumes data (created at runtime)
+postgres_data/
+mongo_data/
+prometheus_data/
+grafana_data/
+
+# Environment & Secrets
 .env
+.env.local
+.env.*.local
+*.secret
+*.key
+*.pem
+*.crt
+
+# Monitoring & Metrics
+prometheus/data/
+grafana/data/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+.cache/
+
+# Large files (GitHub limit is 100MB)
+*.zip
+*.tar.gz
+*.rar
+*.7z

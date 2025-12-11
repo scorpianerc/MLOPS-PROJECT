@@ -1,4 +1,4 @@
-name: MLOps Unified Pipeline
+name: MLOps Pipeline
 
 on:
   schedule:
@@ -416,20 +416,55 @@ jobs:
         echo "- **Traditional ML Accuracy**: ${{ needs.model-retraining.outputs.traditional_accuracy }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Deploy Time**: $(date +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
         
-    - name: Deploy to production
+    - name: Test Docker image locally
       run: |
-        echo "🚀 Deploying to production environment..."
-        # Uncomment and configure based on your deployment target:
-        # docker-compose pull
-        # docker-compose up -d
-        # kubectl apply -f k8s/
-        # Or trigger cloud deployment via API
+        echo "🧪 Testing Docker image..."
         
-    - name: Health check
+        # Pull the image
+        docker pull ghcr.io/${{ github.repository }}:latest
+        
+        # Create minimal test environment
+        echo "POSTGRES_USER=test_user" > .env.test
+        echo "POSTGRES_PASSWORD=test_pass" >> .env.test
+        echo "POSTGRES_DB=test_db" >> .env.test
+        echo "POSTGRES_HOST=localhost" >> .env.test
+        echo "POSTGRES_PORT=5432" >> .env.test
+        
+        # Test container can start
+        docker run --rm --env-file .env.test \
+          ghcr.io/${{ github.repository }}:latest \
+          python -c "print('✅ Container starts successfully')"
+        
+    - name: Deployment Instructions
       run: |
-        echo "🏥 Running health checks..."
-        # Add your health check logic
-        # curl -f http://your-app-url/health || exit 1
+        echo "## 🚀 Deployment Options" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Docker image built and pushed successfully!**" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "📦 **Image**: \`ghcr.io/${{ github.repository }}:latest\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Option 1: Local Docker Deployment" >> $GITHUB_STEP_SUMMARY
+        echo '```bash' >> $GITHUB_STEP_SUMMARY
+        echo "# Pull latest image" >> $GITHUB_STEP_SUMMARY
+        echo "docker pull ghcr.io/${{ github.repository }}:latest" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "# Start services" >> $GITHUB_STEP_SUMMARY
+        echo "docker-compose pull" >> $GITHUB_STEP_SUMMARY
+        echo "docker-compose up -d" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Option 2: Oracle Cloud Free Tier" >> $GITHUB_STEP_SUMMARY
+        echo "Deploy permanently free on Oracle Cloud (2 VMs, 24GB RAM)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "See [ORACLE_CLOUD_FREE_DEPLOYMENT.md](../ORACLE_CLOUD_FREE_DEPLOYMENT.md) for details" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Option 3: Manual Server Deployment" >> $GITHUB_STEP_SUMMARY
+        echo '```bash' >> $GITHUB_STEP_SUMMARY
+        echo "# On your server" >> $GITHUB_STEP_SUMMARY
+        echo "git pull origin main" >> $GITHUB_STEP_SUMMARY
+        echo "docker-compose pull" >> $GITHUB_STEP_SUMMARY
+        echo "docker-compose up -d" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
 
   notification:
     name: Send Notifications

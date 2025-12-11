@@ -390,7 +390,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v4
       with:
-        images: ghcr.io/${{ github.repository }}
+        images: ghcr.io/${{ github.repository_owner }}/mlops-project
         tags: |
           type=ref,event=branch
           type=semver,pattern={{version}}
@@ -421,7 +421,7 @@ jobs:
         echo "🧪 Testing Docker image..."
         
         # Pull the image
-        docker pull ghcr.io/${{ github.repository }}:latest
+        docker pull ghcr.io/${{ github.repository_owner }}/mlops-project:latest
         
         # Create minimal test environment
         echo "POSTGRES_USER=test_user" > .env.test
@@ -432,7 +432,7 @@ jobs:
         
         # Test container can start
         docker run --rm --env-file .env.test \
-          ghcr.io/${{ github.repository }}:latest \
+          ghcr.io/${{ github.repository_owner }}/mlops-project:latest \
           python -c "print('✅ Container starts successfully')"
         
     - name: Deployment Instructions
@@ -441,12 +441,12 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "✅ **Docker image built and pushed successfully!**" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "📦 **Image**: \`ghcr.io/${{ github.repository }}:latest\`" >> $GITHUB_STEP_SUMMARY
+        echo "📦 **Image**: \`ghcr.io/${{ github.repository_owner }}/mlops-project:latest\`" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Option 1: Local Docker Deployment" >> $GITHUB_STEP_SUMMARY
         echo '```bash' >> $GITHUB_STEP_SUMMARY
         echo "# Pull latest image" >> $GITHUB_STEP_SUMMARY
-        echo "docker pull ghcr.io/${{ github.repository }}:latest" >> $GITHUB_STEP_SUMMARY
+        echo "docker pull ghcr.io/${{ github.repository_owner }}/mlops-project:latest" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "# Start services" >> $GITHUB_STEP_SUMMARY
         echo "docker-compose pull" >> $GITHUB_STEP_SUMMARY

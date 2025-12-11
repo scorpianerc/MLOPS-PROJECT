@@ -254,7 +254,7 @@ jobs:
     - name: Validate docker-compose.yml
       run: |
         echo "🔍 Validating docker-compose.yml syntax..."
-        docker-compose config --quiet
+        docker compose config --quiet
         echo "✅ docker-compose.yml is valid"
         
     - name: Check environment variables

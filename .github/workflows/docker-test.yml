@@ -38,56 +38,56 @@ jobs:
         cp .env.example .env
         echo "Creating test environment configuration..."
         cat .env
-        
-    - name: Build Docker images
+    
+    - name: Free up disk space
       run: |
-        echo "🔨 Building Docker images..."
-        docker compose build --parallel
+        echo "🧹 Freeing up disk space on GitHub Actions runner..."
+        df -h
+        docker system prune -af --volumes
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        df -h
         
-    - name: Check image sizes
+    - name: Build API service only
       run: |
-        echo "📦 Docker image sizes:"
-        docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | grep sentiment
+        echo "🔨 Building API service (core service for testing)..."
+        docker compose build api
+        echo "📦 API image size:"
+        docker images sentimentprojek-api
         
-    - name: Start services
+    - name: Start minimal services
       run: |
-        echo "🚀 Starting all services..."
-        docker compose up -d
+        echo "🚀 Starting core services (API, PostgreSQL, MongoDB)..."
+        docker compose up -d postgres mongodb api
+        echo "⏳ Waiting 10 seconds for databases to initialize..."
+        sleep 10
         
-    - name: Wait for services to be healthy
+    - name: Wait for API to be healthy
       run: |
-        echo "⏳ Waiting for services to be ready..."
-        timeout=120
+        echo "⏳ Waiting for API to be ready..."
+        timeout=90
         elapsed=0
         
         while [ $elapsed -lt $timeout ]; do
-          if docker compose ps | grep -q "Up"; then
-            echo "✅ Services are starting..."
-            sleep 5
-            elapsed=$((elapsed + 5))
-            
-            # Check if API is responding
-            if curl -f http://localhost:8080/health 2>/dev/null; then
-              echo "✅ API is healthy!"
-              break
-            fi
+          if curl -f http://localhost:8080/health 2>/dev/null; then
+            echo "✅ API is healthy!"
+            break
           else
-            echo "⏳ Waiting for services..."
+            echo "⏳ Waiting... ($elapsed/$timeout seconds)"
             sleep 5
             elapsed=$((elapsed + 5))
           fi
         done
         
         if [ $elapsed -ge $timeout ]; then
-          echo "❌ Services failed to start in time"
-          docker compose logs
+          echo "❌ API failed to start"
+          docker compose logs api
           exit 1
         fi
         
     - name: Check service status
       run: |
         echo "📊 Service Status:"
-        docker compose ps
+        docker compose ps api postgres mongodb
         
     - name: Test API health endpoint
       run: |
@@ -130,34 +130,6 @@ jobs:
           exit 1
         fi
         
-    - name: Test Streamlit accessibility
-      run: |
-        echo "🧪 Testing Streamlit dashboard..."
-        if curl -f http://localhost:8501 >/dev/null 2>&1; then
-          echo "✅ Streamlit is accessible"
-        else
-          echo "⚠️ Streamlit not accessible (may need more time to start)"
-        fi
-        
-    - name: Test Prometheus metrics
-      run: |
-        echo "🧪 Testing Prometheus..."
-        if curl -f http://localhost:9090/-/healthy >/dev/null 2>&1; then
-          echo "✅ Prometheus is healthy"
-        else
-          echo "❌ Prometheus is not healthy"
-          exit 1
-        fi
-        
-    - name: Test Grafana accessibility
-      run: |
-        echo "🧪 Testing Grafana..."
-        if curl -f http://localhost:3000 >/dev/null 2>&1; then
-          echo "✅ Grafana is accessible"
-        else
-          echo "⚠️ Grafana not accessible (may need more time)"
-        fi
-        
     - name: Test PostgreSQL connection
       run: |
         echo "🧪 Testing PostgreSQL..."
@@ -186,16 +158,18 @@ jobs:
       run: |
         echo "## 🐳 Docker Stack Test Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
+        echo "ℹ️ **CI Mode**: Testing core services only to conserve disk space" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
         echo "| Service | Status |" >> $GITHUB_STEP_SUMMARY
         echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
-        echo "| API Server | ✅ Tested |" >> $GITHUB_STEP_SUMMARY
-        echo "| Streamlit | ✅ Tested |" >> $GITHUB_STEP_SUMMARY
-        echo "| Prometheus | ✅ Tested |" >> $GITHUB_STEP_SUMMARY
-        echo "| Grafana | ✅ Tested |" >> $GITHUB_STEP_SUMMARY
+        echo "| API Server | ✅ Built & Tested |" >> $GITHUB_STEP_SUMMARY
         echo "| PostgreSQL | ✅ Tested |" >> $GITHUB_STEP_SUMMARY
         echo "| MongoDB | ✅ Tested |" >> $GITHUB_STEP_SUMMARY
+        echo "| Monitoring Stack | ⏭️ Skipped in CI |" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Build Time**: $(date)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "💡 **Full Stack**: All services can be tested locally with \`docker-compose up -d\`" >> $GITHUB_STEP_SUMMARY
         
     - name: Stop services
       if: always()

@@ -61,6 +61,11 @@ jobs:
         pip install -r requirements.txt
         pip install "dvc==${{ env.DVC_VERSION }}" "dvc-objects==${{ env.DVC_OBJECTS_VERSION }}" dvc-gdrive
         python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('punkt_tab')"
+    
+    - name: Pull existing data from DVC
+      run: |
+        echo "📥 Pulling existing data from DVC..."
+        dvc pull data/raw/reviews.csv -v || echo "⚠️ DVC pull failed, will try scraping"
         
     - name: Scrape new reviews (scheduled only)
       if: github.event_name == 'schedule'
@@ -84,14 +89,10 @@ jobs:
         
         try:
             if not os.path.exists('data/raw/reviews.csv'):
-                print('⚠️ No raw data found, creating sample data...')
-                os.makedirs('data/raw', exist_ok=True)
-                pd.DataFrame({
-                    'review_id': ['r1', 'r2', 'r3', 'r4', 'r5'],
-                    'review_text': ['Aplikasi sangat bagus', 'Buruk sekali', 'Cukup baik', 'Tidak memuaskan', 'Excellent app'],
-                    'rating': [5, 1, 4, 2, 5],
-                    'date': ['2024-01-01']*5
-                }).to_csv('data/raw/reviews.csv', index=False)
+                print('❌ No raw data found!')
+                print('💡 Tip: Run data collection first or ensure scraping succeeded.')
+                print('📝 For manual workflow: Upload data before running pipeline')
+                sys.exit(1)
             
             df = pd.read_csv('data/raw/reviews.csv')
             

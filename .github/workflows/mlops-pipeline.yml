@@ -266,7 +266,7 @@ jobs:
       id: metrics
       run: |
         if [ -f models/bert_metrics.json ]; then
-          BERT_ACC=$(python -c "import json; print(json.load(open('models/bert_metrics.json'))['accuracy'])")
+          BERT_ACC=$(python -c "import json; print(json.load(open('models/bert_metrics.json'))['test']['accuracy'])")
           echo "bert_accuracy=$BERT_ACC" >> $GITHUB_OUTPUT
           echo "🤖 BERT Accuracy: $BERT_ACC"
         fi
@@ -385,13 +385,13 @@ jobs:
           echo "📊 Loading existing model metrics from repository"
           # Try to load from existing files
           if [ -f models/bert_metrics.json ]; then
-            BERT_ACC=$(python -c "import json; print(json.load(open('models/bert_metrics.json')).get('accuracy', 'N/A'))" 2>/dev/null || echo "N/A")
+            BERT_ACC=$(python -c "import json; print(json.load(open('models/bert_metrics.json'))['test']['accuracy'])" 2>/dev/null || echo "N/A")
           else
             BERT_ACC="N/A"
           fi
           
           if [ -f models/metrics.json ]; then
-            TRAD_ACC=$(python -c "import json; print(json.load(open('models/metrics.json')).get('test_accuracy', 'N/A'))" 2>/dev/null || echo "N/A")
+            TRAD_ACC=$(python -c "import json; print(json.load(open('models/metrics.json'))['test_accuracy'])" 2>/dev/null || echo "N/A")
           else
             TRAD_ACC="N/A"
           fi

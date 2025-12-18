@@ -90,6 +90,9 @@ models/bert_model/
 models/pytorch_model.bin
 !models/.gitkeep
 !models/README.md
+# Allow only metrics JSON files (small, important for tracking)
+!models/bert_metrics.json
+!models/metrics.json
 
 # DVC tracked files (managed by DVC)
 /data/raw/reviews.csv

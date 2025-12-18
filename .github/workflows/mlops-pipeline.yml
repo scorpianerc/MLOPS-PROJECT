@@ -340,9 +340,72 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
         fi
 
+  get-current-metrics:
+    name: Get Current Model Metrics
+    needs: [data-collection-and-validation, dvc-version-control, model-retraining]
+    if: always() && needs.data-collection-and-validation.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      bert_accuracy: ${{ steps.load_metrics.outputs.bert_accuracy }}
+      traditional_accuracy: ${{ steps.load_metrics.outputs.traditional_accuracy }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install DVC
+      run: |
+        pip install "dvc==${{ env.DVC_VERSION }}" "dvc-objects==${{ env.DVC_OBJECTS_VERSION }}"
+        
+    - name: Pull models from DVC
+      run: |
+        dvc pull models/ -v || echo "⚠️ DVC pull failed, will use newly trained models"
+        
+    - name: Download newly trained models (if available)
+      if: needs.model-retraining.outputs.models_trained == 'true'
+      uses: actions/download-artifact@v4
+      with:
+        name: trained-models-${{ github.run_number }}
+        path: models/
+        
+    - name: Load metrics
+      id: load_metrics
+      run: |
+        # Use new metrics if retraining happened, otherwise use existing
+        if [ "${{ needs.model-retraining.outputs.models_trained }}" == "true" ]; then
+          echo "📊 Using newly trained model metrics"
+          BERT_ACC="${{ needs.model-retraining.outputs.bert_accuracy }}"
+          TRAD_ACC="${{ needs.model-retraining.outputs.traditional_accuracy }}"
+        else
+          echo "📊 Loading existing model metrics from repository"
+          # Try to load from existing files
+          if [ -f models/bert_metrics.json ]; then
+            BERT_ACC=$(python -c "import json; print(json.load(open('models/bert_metrics.json')).get('accuracy', 'N/A'))" 2>/dev/null || echo "N/A")
+          else
+            BERT_ACC="N/A"
+          fi
+          
+          if [ -f models/metrics.json ]; then
+            TRAD_ACC=$(python -c "import json; print(json.load(open('models/metrics.json')).get('test_accuracy', 'N/A'))" 2>/dev/null || echo "N/A")
+          else
+            TRAD_ACC="N/A"
+          fi
+        fi
+        
+        echo "bert_accuracy=$BERT_ACC" >> $GITHUB_OUTPUT
+        echo "traditional_accuracy=$TRAD_ACC" >> $GITHUB_OUTPUT
+        
+        echo "🤖 BERT Accuracy: $BERT_ACC"
+        echo "📊 Traditional ML Accuracy: $TRAD_ACC"
+
   docker-build-and-deploy:
     name: Build & Deploy
-    needs: [data-collection-and-validation, model-retraining]
+    needs: [data-collection-and-validation, model-retraining, get-current-metrics]
     if: |
       always() &&
       inputs.skip_deploy != 'true' &&
@@ -413,8 +476,9 @@ jobs:
         echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Docker Image**: ${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **BERT Accuracy**: ${{ needs.model-retraining.outputs.bert_accuracy }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Traditional ML Accuracy**: ${{ needs.model-retraining.outputs.traditional_accuracy }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Model Retrained**: ${{ needs.model-retraining.outputs.models_trained == 'true' && '✅ Yes' || '⏭️ No (using existing)' }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **BERT Accuracy**: ${{ needs.get-current-metrics.outputs.bert_accuracy }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Traditional ML Accuracy**: ${{ needs.get-current-metrics.outputs.traditional_accuracy }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Deploy Time**: $(date +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
         
     - name: Test Docker image locally
@@ -454,12 +518,7 @@ jobs:
         echo "docker-compose up -d" >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Option 2: Oracle Cloud Free Tier" >> $GITHUB_STEP_SUMMARY
-        echo "Deploy permanently free on Oracle Cloud (2 VMs, 24GB RAM)" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "See [ORACLE_CLOUD_FREE_DEPLOYMENT.md](../ORACLE_CLOUD_FREE_DEPLOYMENT.md) for details" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Option 3: Manual Server Deployment" >> $GITHUB_STEP_SUMMARY
+        echo "### Option 2: Manual Server Deployment" >> $GITHUB_STEP_SUMMARY
         echo '```bash' >> $GITHUB_STEP_SUMMARY
         echo "# On your server" >> $GITHUB_STEP_SUMMARY
         echo "git pull origin main" >> $GITHUB_STEP_SUMMARY
@@ -469,7 +528,7 @@ jobs:
 
   notification:
     name: Send Notifications
-    needs: [data-collection-and-validation, dvc-version-control, model-retraining, docker-build-and-deploy]
+    needs: [data-collection-and-validation, dvc-version-control, model-retraining, get-current-metrics, docker-build-and-deploy]
     if: always()
     runs-on: ubuntu-latest
     
@@ -485,6 +544,10 @@ jobs:
         echo "| DVC Committed | ${{ needs.dvc-version-control.outputs.dvc_committed == 'true' && '✅ Yes' || '⏭️ No' }} |" >> $GITHUB_STEP_SUMMARY
         echo "| Models Trained | ${{ needs.model-retraining.outputs.models_trained == 'true' && '✅ Yes' || '⏭️ Skipped' }} |" >> $GITHUB_STEP_SUMMARY
         echo "| Deployment | ${{ needs.docker-build-and-deploy.result == 'success' && '✅ Success' || '⏭️ Skipped' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📊 Current Model Performance" >> $GITHUB_STEP_SUMMARY
+        echo "- **BERT Accuracy**: ${{ needs.get-current-metrics.outputs.bert_accuracy }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Traditional ML Accuracy**: ${{ needs.get-current-metrics.outputs.traditional_accuracy }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "**Pipeline Run**: #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
         echo "**Trigger**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY

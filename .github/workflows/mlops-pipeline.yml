@@ -65,10 +65,12 @@ jobs:
     - name: Pull existing data from DVC
       run: |
         echo "📥 Pulling existing data from DVC..."
-        dvc pull data/raw/reviews.csv -v || echo "⚠️ DVC pull failed, will try scraping"
+        dvc pull data/raw/reviews.csv -v || echo "⚠️ DVC pull failed (no remote configured)"
         
-    - name: Scrape new reviews (scheduled only)
-      if: github.event_name == 'schedule'
+    - name: Scrape new reviews
+      # For scheduled runs: always scrape to get fresh data
+      # For manual/push runs: scrape if DVC pull failed (no existing data)
+      if: github.event_name == 'schedule' || !hashFiles('data/raw/reviews.csv')
       run: |
         echo "📥 Scraping new reviews from Play Store..."
         python src/data_collection/scraper.py || echo "⚠️ Scraping failed, continuing with existing data"

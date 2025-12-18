@@ -36,6 +36,9 @@ jobs:
     - name: Create .env file
       run: |
         cp .env.example .env
+        # Add CI flag to skip model loading in tests
+        echo "CI=true" >> .env
+        echo "SKIP_MODEL_LOADING=true" >> .env
         echo "Creating test environment configuration..."
         cat .env
     
@@ -68,7 +71,7 @@ jobs:
         elapsed=0
         
         while [ $elapsed -lt $timeout ]; do
-          if curl -f http://localhost:8080/health 2>/dev/null; then
+          if curl -f http://localhost:5000/health 2>/dev/null; then
             echo "✅ API is healthy!"
             break
           else
@@ -92,7 +95,7 @@ jobs:
     - name: Test API health endpoint
       run: |
         echo "🧪 Testing API health endpoint..."
-        response=$(curl -s http://localhost:8080/health)
+        response=$(curl -s http://localhost:5000/health)
         echo "Response: $response"
         
         if echo "$response" | grep -q "healthy"; then
@@ -105,7 +108,7 @@ jobs:
     - name: Test API model info
       run: |
         echo "🧪 Testing model info endpoint..."
-        response=$(curl -s http://localhost:8080/model/info)
+        response=$(curl -s http://localhost:5000/model/info)
         echo "Response: $response"
         
         # In CI, model files are not included (474 MB excluded in .gitignore)
@@ -123,7 +126,7 @@ jobs:
     - name: Test sentiment prediction
       run: |
         echo "🧪 Testing prediction endpoint..."
-        response=$(curl -s -X POST http://localhost:8080/predict \
+        response=$(curl -s -X POST http://localhost:5000/predict \
           -H "Content-Type: application/json" \
           -d '{"text": "Aplikasi ini sangat bagus dan mudah digunakan"}')
         echo "Response: $response"

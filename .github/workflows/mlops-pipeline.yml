@@ -184,13 +184,14 @@ jobs:
       id: dvc_commit
       run: |
         echo "📦 Adding data to DVC..."
-        dvc add data/raw/reviews.csv data/processed/ || echo "DVC add completed"
+        # Only add raw data CSV to DVC (processed data is git-tracked)
+        dvc add data/raw/reviews.csv || echo "DVC add completed"
         
         if [ -n "$(git status --porcelain)" ]; then
           echo "✅ Changes detected, committing to DVC"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add data/*.dvc data/processed/*.dvc .dvc/config .gitignore
+          git add data/raw/*.dvc .dvc/config .gitignore
           git commit -m "chore(dvc): update data version - $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
           echo "committed=true" >> $GITHUB_OUTPUT
         else

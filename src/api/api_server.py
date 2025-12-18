@@ -192,6 +192,12 @@ def load_model():
 async def startup_event():
     """Load model saat startup"""
     logger.info("🚀 Starting FastAPI server...")
+    
+    # Skip model loading in CI/test environment
+    if os.getenv('CI') == 'true' or os.getenv('SKIP_MODEL_LOADING') == 'true':
+        logger.info("⏭️  Skipping model loading (CI/test mode)")
+        return
+    
     success = load_model()
     if not success:
         logger.warning("⚠️  Model not loaded - API will return errors")

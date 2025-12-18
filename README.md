@@ -161,57 +161,16 @@ python src/scheduler/main.py
 ### System Architecture
 
 ```mermaid
-graph TB
-    subgraph "Data Collection"
-        A[Google Play Store] -->|Scraping| B[Scraper Service]
-        B -->|Raw Reviews| C[(MongoDB)]
-    end
-    
-    subgraph "Data Processing"
-        C -->|Fetch| D[Preprocessing Pipeline]
-        D -->|Feature Engineering| E[14 Features]
-        E -->|Store| F[(PostgreSQL)]
-    end
-    
-    subgraph "ML Pipeline"
-        F -->|Training Data| G[IndoBERT Training]
-        G -->|Save| H[(Model Storage)]
-        H -->|Track| I[MLflow Registry]
-        G -->|Version| J[DVC]
-    end
-    
-    subgraph "Model Serving"
-        H -->|Load| K[FastAPI Server]
-        K -->|Predictions| F
-        K -->|Metrics| L[Prometheus]
-    end
-    
-    subgraph "Monitoring & Dashboards"
-        F -->|SQL Queries| M[Grafana]
-        L -->|Time Series| M
-        K -->|Web UI| N[Streamlit]
-    end
-    
-    subgraph "Automation"
-        O[Scheduler] -->|Trigger| B
-        O -->|Check Drift| P[Drift Detection]
-        P -->|Alert| O
-        O -->|Retrain| G
-    end
-    
-    subgraph "CI/CD"
-        Q[GitHub Actions] -->|Test| R[Automated Tests]
-        Q -->|Build| S[Docker Images]
-        S -->|Deploy| T[GHCR]
-    end
-    
-    style A fill:#e1f5ff
-    style C fill:#fff3cd
-    style F fill:#fff3cd
-    style H fill:#d4edda
-    style K fill:#f8d7da
-    style M fill:#d1ecf1
-    style N fill:#d1ecf1
+graph LR
+    A[Google Play Store] -->|Scraping| B[MongoDB]
+    B -->|Processing| C[PostgreSQL]
+    C -->|Training| D[IndoBERT Model]
+    D -->|Serving| E[FastAPI]
+    E -->|Metrics| F[Prometheus]
+    F -->|Dashboard| G[Grafana]
+    E -->|UI| H[Streamlit]
+    I[Scheduler] -->|Automate| B
+    I -->|Retrain| D
 ```
 
 ### Data Flow
@@ -246,85 +205,30 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    subgraph Development
-        A[Code Changes] --> B[Git Push]
-        B --> C[GitHub Actions]
-    end
-    
-    subgraph Testing
-        C --> D[Unit Tests]
-        D --> E[Integration Tests]
-        E --> F[Model Validation]
-    end
-    
-    subgraph Build
-        F --> G[Docker Build]
-        G --> H[Push to GHCR]
-    end
-    
-    subgraph Deploy
-        H --> I[Pull Image]
-        I --> J[docker-compose up]
-    end
-    
-    subgraph Production
-        J --> K[7 Services Running]
-        K --> L[Monitor Metrics]
-        L --> M{Drift?}
-        M -->|Yes| N[Auto Retrain]
-        M -->|No| L
-        N --> K
-    end
-    
-    style A fill:#e1f5ff
-    style F fill:#d4edda
-    style K fill:#f8d7da
-    style M fill:#fff3cd
+    A[Git Push] --> B[GitHub Actions]
+    B --> C[Tests]
+    C --> D[Docker Build]
+    D --> E[Deploy]
+    E --> F[Monitor]
+    F -->|Drift| G[Auto Retrain]
+    G --> E
 ```
 
 ### Deployment Architecture
 
 ```mermaid
 graph TB
-    subgraph "Docker Compose Stack"
-        subgraph "Application Layer"
-            API[FastAPI API<br/>:8080]
-            STREAM[Streamlit<br/>:8501]
-            SCHED[Scheduler<br/>Background]
-        end
-        
-        subgraph "Data Layer"
-            PG[(PostgreSQL<br/>:5432)]
-            MONGO[(MongoDB<br/>:27017)]
-        end
-        
-        subgraph "Monitoring Layer"
-            PROM[Prometheus<br/>:9090]
-            GRAF[Grafana<br/>:3000]
-        end
-    end
+    USER[User] -->|HTTP| API[FastAPI :5000]
+    USER -->|Browser| STREAM[Streamlit :8501]
+    USER -->|Dashboard| GRAF[Grafana :3000]
     
-    API --> PG
-    API --> MONGO
+    API --> PG[(PostgreSQL)]
+    API --> MONGO[(MongoDB)]
     STREAM --> PG
-    SCHED --> PG
-    SCHED --> MONGO
     
-    API -.->|metrics| PROM
-    SCHED -.->|metrics| PROM
-    
+    API -.->|metrics| PROM[Prometheus :9090]
     PROM --> GRAF
     PG --> GRAF
-    
-    USER([User]) -->|HTTP| API
-    USER -->|Browser| STREAM
-    USER -->|Dashboard| GRAF
-    
-    style API fill:#f8d7da
-    style STREAM fill:#d1ecf1
-    style PG fill:#fff3cd
-    style MONGO fill:#fff3cd
-    style GRAF fill:#d4edda
 ```
 
 ## Monitoring

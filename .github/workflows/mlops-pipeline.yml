@@ -61,16 +61,20 @@ jobs:
         pip install -r requirements.txt
         pip install "dvc==${{ env.DVC_VERSION }}" "dvc-objects==${{ env.DVC_OBJECTS_VERSION }}" dvc-gdrive
         python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('punkt_tab')"
-    
-    - name: Pull existing data from DVC
+
+    - name: Check existing data
+      id: check_data
       run: |
-        echo "📥 Pulling existing data from DVC..."
-        dvc pull data/raw/reviews.csv -v || echo "⚠️ DVC pull failed (no remote configured)"
+        if [ -f "data/raw/reviews.csv" ]; then
+          echo "✅ Found existing data in repository"
+          echo "has_data=true" >> $GITHUB_OUTPUT
+        else
+          echo "⚠️ No existing data found"
+          echo "has_data=false" >> $GITHUB_OUTPUT
+        fi
         
-    - name: Scrape new reviews
-      # For scheduled runs: always scrape to get fresh data
-      # For manual/push runs: scrape if DVC pull failed (no existing data)
-      if: github.event_name == 'schedule' || !hashFiles('data/raw/reviews.csv')
+    - name: Scrape new reviews (scheduled only)
+      if: github.event_name == 'schedule'
       run: |
         echo "📥 Scraping new reviews from Play Store..."
         python src/data_collection/scraper.py || echo "⚠️ Scraping failed, continuing with existing data"
@@ -92,8 +96,10 @@ jobs:
         try:
             if not os.path.exists('data/raw/reviews.csv'):
                 print('❌ No raw data found!')
-                print('💡 Tip: Run data collection first or ensure scraping succeeded.')
-                print('📝 For manual workflow: Upload data before running pipeline')
+                print('💡 Data should be available from:')
+                print('   1. Committed in repository (for CI)')
+                print('   2. Scraped from scheduled runs')
+                print('   3. DVC remote (after Google Drive setup)')
                 sys.exit(1)
             
             df = pd.read_csv('data/raw/reviews.csv')

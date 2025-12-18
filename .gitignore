@@ -95,7 +95,8 @@ models/pytorch_model.bin
 !models/metrics.json
 
 # DVC tracked files (managed by DVC)
-/data/raw/reviews.csv
+# Note: reviews.csv temporarily committed to Git (3MB) until DVC remote configured
+# /data/raw/reviews.csv  # Will be DVC-tracked after Google Drive setup
 /data/processed/processed_reviews.csv
 /data/processed/features.pkl
 /models/bert_model

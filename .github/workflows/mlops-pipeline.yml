@@ -195,21 +195,25 @@ jobs:
     - name: DVC add and commit
       id: dvc_commit
       run: |
-        echo "📦 Adding data to DVC..."
-        # Only add raw data CSV to DVC (processed data is git-tracked)
-        dvc add data/raw/reviews.csv || echo "DVC add completed"
+        echo "📦 Checking DVC tracking..."
+        # Skip DVC add - reviews.csv already in Git (temporary until DVC remote configured)
+        # When DVC remote is ready:
+        # 1. Remove reviews.csv from Git: git rm --cached data/raw/reviews.csv
+        # 2. Add to gitignore: /data/raw/reviews.csv
+        # 3. Run: dvc add data/raw/reviews.csv
         
-        if [ -n "$(git status --porcelain)" ]; then
-          echo "✅ Changes detected, committing to DVC"
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add data/raw/*.dvc .dvc/config .gitignore
-          git commit -m "chore(dvc): update data version - $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
-          echo "committed=true" >> $GITHUB_OUTPUT
-        else
-          echo "⏭️ No DVC changes detected"
-          echo "committed=false" >> $GITHUB_OUTPUT
-        fi
+        echo "⏭️ Skipping DVC add (data in Git temporarily)"
+        echo "committed=false" >> $GITHUB_OUTPUT
+        
+        # Uncomment below when DVC remote is configured
+        # dvc add data/raw/reviews.csv || echo "Already tracked"
+        # if [ -n "$(git status --porcelain)" ]; then
+        #   git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        #   git config --local user.name "github-actions[bot]"
+        #   git add data/raw/*.dvc .dvc/config .gitignore
+        #   git commit -m "chore(dvc): update data - $(date +'%Y-%m-%d %H:%M:%S')"
+        #   echo "committed=true" >> $GITHUB_OUTPUT
+        # fi
         
     - name: Push to DVC remote
       run: |
@@ -314,13 +318,29 @@ jobs:
         
     - name: Commit models to DVC
       run: |
-        dvc add models/ || echo "DVC add models completed"
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git config --local user.name "github-actions[bot]"
-        git add models/*.dvc .dvc/config
-        git commit -m "chore(models): update trained models - $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes"
-        git push || echo "⚠️ Git push failed"
-        dvc push -v || echo "⚠️ DVC push failed"
+        echo "📦 Adding large model files to DVC..."
+        # Only add large model binaries, not metrics JSON (already in Git)
+        if [ -d "models/bert_model" ]; then
+          dvc add models/bert_model || echo "BERT model already tracked"
+        fi
+        if [ -f "models/vectorizer.pkl" ]; then
+          dvc add models/vectorizer.pkl || echo "Vectorizer already tracked"
+        fi
+        if [ -f "models/model.pkl" ]; then
+          dvc add models/model.pkl || echo "Traditional model already tracked"
+        fi
+        
+        # Commit .dvc files if any were created
+        if ls models/*.dvc 1> /dev/null 2>&1; then
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add models/*.dvc .dvc/config .gitignore
+          git commit -m "chore(dvc): update model tracking - $(date +'%Y-%m-%d %H:%M:%S')" || echo "No DVC changes to commit"
+          git push || echo "⚠️ Git push failed"
+          dvc push -v || echo "⚠️ DVC push failed (no remote configured)"
+        else
+          echo "⏭️ No .dvc files to commit"
+        fi
         
     - name: Upload model artifacts
       uses: actions/upload-artifact@v4

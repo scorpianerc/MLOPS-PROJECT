@@ -336,7 +336,7 @@ class BERTTrainer:
 def main():
     """Main training function"""
     # Load parameters
-    with open('params.yaml', 'r') as f:
+    with open('config/params.yaml', 'r') as f:
         params = yaml.safe_load(f)
     
     training_params = params['training']

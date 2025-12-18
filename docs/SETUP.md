@@ -3,37 +3,42 @@
 ## Prerequisites
 
 - Python 3.10+
-- Docker & Docker Compose (untuk production)
+- Docker & Docker Desktop (Required untuk deployment)
 - Git
-- DVC (optional, akan di-install otomatis)
 
-## Quick Start (Tercepat)
+## Quick Start (Recommended)
 
 ### Windows (PowerShell):
 ```powershell
-# 1. Clone atau buka project
+# 1. Navigate to project
 cd d:\MLOPS\SentimentProjek
 
-# 2. Jalankan quick start script
-python quickstart.py
+# 2. Pastikan Docker Desktop sudah running
+
+# 3. Start semua services dengan Docker
+docker-compose up -d
 ```
 
-Pilih mode yang sesuai:
-- **Mode 1**: Local Development (tanpa Docker, untuk development)
-- **Mode 2**: Production (dengan Docker, untuk deployment)
-- **Mode 3**: Scrape data saja
-- **Mode 4**: Train model saja
+**Services yang akan berjalan**:
+- API Server (FastAPI) - Port 8080
+- Streamlit Dashboard - Port 8501
+- Grafana Monitoring - Port 3000
+- Prometheus Metrics - Port 9090
+- PostgreSQL Database - Port 5432
+- MongoDB - Port 27017
+- Automated Scheduler (background)
 
-## Setup Manual
+## Setup Manual (Development)
+
+Jika ingin run individual components tanpa Docker:
 
 ### 1. Install Dependencies
 
 ```powershell
 # Install Python packages
 pip install -r requirements.txt
-pip install -r requirements-cli.txt
 
-# Download NLTK data
+# Download NLTK data (jika diperlukan)
 python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords')"
 ```
 
@@ -53,51 +58,58 @@ POSTGRES_PASSWORD=your_strong_password
 GRAFANA_ADMIN_PASSWORD=your_admin_password
 ```
 
-### 3. Initialize DVC
+### 3. Start Databases (via Docker)
+
+Meskipun development, database tetap pakai Docker untuk kemudahan:
 
 ```powershell
-dvc init
-```
-
-### 4. Create Directories
-
-```powershell
-python cli.py init
+# Start hanya PostgreSQL dan MongoDB
+docker-compose up -d postgres mongodb
 ```
 
 ## Menjalankan Project
 
-### A. Mode Local (Development)
+### Mode Production (Recommended - Docker)
 
-#### 1. Scrape Data
 ```powershell
-# Scrape 500 reviews (default)
-python cli.py scrape
+# Start semua services
+docker-compose up -d
 
-# Atau dengan custom jumlah
-python cli.py scrape --max-reviews 1000
+# Check status
+docker-compose ps
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
 ```
 
-#### 2. Preprocess Data
+### Mode Development (Individual Components)
+
+#### 1. Scraping Data
 ```powershell
-python cli.py preprocess
+python src/data_collection/scraper.py
 ```
 
-#### 3. Train Model
+#### 2. Train Model
 ```powershell
-# Via CLI
-python cli.py train
-
-# Atau langsung
-python src/training/train.py
+python src/training/train_bert.py
 ```
 
-#### 4. Run Predictions
+#### 3. Run API Server
 ```powershell
-python cli.py predict --batch-size 100
+uvicorn src.api.api_server:app --host 0.0.0.0 --port 8080 --reload
 ```
 
-#### 5. Check Statistics
+#### 4. Run Streamlit Dashboard
+```powershell
+streamlit run app_streamlit.py --server.port 8501
+```
+
+#### 5. Run Scheduler
+```powershell
+python src/scheduler/scheduler.py
 ```powershell
 python cli.py stats
 ```

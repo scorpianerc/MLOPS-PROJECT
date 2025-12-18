@@ -42,9 +42,9 @@ mlflow ui --port 5000
 
 | Document | Description |
 |----------|-------------|
-| [MLOPS_IMPLEMENTATION_GUIDE.md](MLOPS_IMPLEMENTATION_GUIDE.md) | 📘 Complete guide untuk semua 7 fitur |
-| [FEATURE_ENHANCEMENT_RETRAINING.md](FEATURE_ENHANCEMENT_RETRAINING.md) | 📗 Guide untuk comment/rating & retraining strategy |
-| [CICD_METRICS_GUIDE.md](CICD_METRICS_GUIDE.md) | 📙 CI/CD metrics guide |
+| [LOCAL_DEPLOYMENT_GUIDE.md](LOCAL_DEPLOYMENT_GUIDE.md) | 📘 Panduan deployment lokal dengan Docker |
+| [MONITORING_GUIDE.md](MONITORING_GUIDE.md) | 📘 Monitoring dengan Prometheus & Grafana |
+| [GITHUB_ACTIONS_GUIDE.md](GITHUB_ACTIONS_GUIDE.md) | 📘 CI/CD dengan GitHub Actions |
 
 ---
 

@@ -75,10 +75,10 @@ curl http://localhost:8080/health
 ## 📖 Full Documentation
 
 - [Local Deployment Guide](LOCAL_DEPLOYMENT_GUIDE.md) - Complete setup instructions
-- [MLOps Architecture](MLOPS_ARCHITECTURE.md) - System architecture
 - [Quick Reference](MLOPS_QUICK_REFERENCE.md) - Common commands
+- [Monitoring Guide](MONITORING_GUIDE.md) - Grafana & Prometheus setup
 
 ---
 
 **Status**: ✅ All services running on Docker
-**Updated**: December 12, 2025
+**Updated**: December 18, 2025

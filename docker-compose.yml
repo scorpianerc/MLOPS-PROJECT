@@ -88,7 +88,7 @@ services:
       - ./models:/app/models
       - ./logs:/app/logs
       - ./.env:/app/.env
-      - ./params.yaml:/app/params.yaml
+      - ./config/params.yaml:/app/config/params.yaml
     depends_on:
       postgres:
         condition: service_healthy
@@ -120,7 +120,7 @@ services:
     restart: unless-stopped
     command: python src/monitoring/prometheus_exporter.py
     ports:
-      - "8000:8000"
+      - "9100:8000"
 
   # Streamlit Dashboard - Interactive UI
   streamlit:
@@ -165,9 +165,9 @@ services:
     networks:
       - sentiment_network
     restart: unless-stopped
-    command: python -m uvicorn src.api.api_server:app --host 0.0.0.0 --port 8080
+    command: python -m uvicorn src.api.api_server:app --host 0.0.0.0 --port 5000
     ports:
-      - "8080:8080"
+      - "5000:5000"
 
 volumes:
   postgres_data:

@@ -163,14 +163,14 @@ class TestTrainingPipeline:
     
     def test_params_file_exists(self):
         """Test params.yaml exists"""
-        params_file = Path("params.yaml")
-        assert params_file.exists(), "params.yaml not found"
+        params_file = Path("config/params.yaml")
+        assert params_file.exists(), "config/params.yaml not found"
     
     def test_params_file_valid(self):
         """Test params.yaml valid"""
         import yaml
         
-        params_file = Path("params.yaml")
+        params_file = Path("config/params.yaml")
         with open(params_file) as f:
             params = yaml.safe_load(f)
         

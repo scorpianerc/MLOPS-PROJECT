@@ -273,11 +273,11 @@ docker-compose up -d --build
 5. 📈 Monitor drift detection
 
 ### Medium Term (Next Week)
-1. 🚀 Consider cloud deployment (Oracle Cloud Free)
-2. 🔐 Enhance security (HTTPS, auth)
-3. 📊 Setup automated reports
-4. 🎯 Optimize model performance
-5. 📚 Create user documentation
+1. � Enhance security (HTTPS, auth)
+2. 📊 Setup automated reports
+3. 🎯 Optimize model performance
+4. 📚 Create user documentation
+5. 📦 Backup strategy untuk data & models
 
 ---
 
@@ -323,7 +323,7 @@ docker-compose up -d --build
 
 ## 📚 DOCUMENTATION
 
-All documentation available in workspace:
+All documentation available in docs/ folder:
 
 1. **[LOCAL_DEPLOYMENT_GUIDE.md](LOCAL_DEPLOYMENT_GUIDE.md)**  
    Complete local deployment instructions
@@ -331,17 +331,14 @@ All documentation available in workspace:
 2. **[QUICK_ACCESS.md](QUICK_ACCESS.md)**  
    Quick links and commands
 
-3. **[MLOPS_ARCHITECTURE.md](MLOPS_ARCHITECTURE.md)**  
-   System architecture overview
-
-4. **[MLOPS_IMPLEMENTATION_GUIDE.md](MLOPS_IMPLEMENTATION_GUIDE.md)**  
-   Implementation details
-
-5. **[MLOPS_QUICK_REFERENCE.md](MLOPS_QUICK_REFERENCE.md)**  
+3. **[MLOPS_QUICK_REFERENCE.md](MLOPS_QUICK_REFERENCE.md)**  
    Command reference
 
-6. **[ORACLE_CLOUD_FREE_DEPLOYMENT.md](ORACLE_CLOUD_FREE_DEPLOYMENT.md)**  
-   Cloud deployment option
+5. **[MONITORING_GUIDE.md](MONITORING_GUIDE.md)**  
+   Grafana & Prometheus monitoring
+
+6. **[GITHUB_ACTIONS_GUIDE.md](GITHUB_ACTIONS_GUIDE.md)**  
+   CI/CD automation dengan GitHub Actions
 
 ---
 

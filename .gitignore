@@ -48,6 +48,10 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Laporan Tugas (Private - tidak untuk GitHub)
+docs/LAPORAN_IMPLEMENTASI_MLOPS.md
+docs/LAPORAN_PENGUMPULAN_DATA.md
 .tox/
 .hypothesis/
 *.cover

@@ -9,8 +9,8 @@ on:
     paths:
       - 'data/**'
       - 'src/**'
-      - 'dvc.yaml'
-      - 'params.yaml'
+      - 'config/dvc.yaml'
+      - 'config/params.yaml'
   workflow_dispatch:
     inputs:
       force_retrain:

@@ -384,7 +384,7 @@ st.markdown("""
 
 # Load data from PostgreSQL - FORCE FRESH CONNECTION
 def load_data():
-    """Load reviews data from PostgreSQL database"""
+    """Load reviews data"""
     try:
         # Auto-detect host: 'postgres' for Docker, 'localhost' for local
         db_host = os.getenv('POSTGRES_HOST', 'localhost')
@@ -569,7 +569,7 @@ with st.spinner("Loading data from PostgreSQL..."):
     st.session_state.data_loaded = True
     st.session_state.last_refresh = datetime.now()
 
-st.markdown("<p style='text-align: center; color: rgba(255,255,255,0.6); margin-bottom: 2rem;'>MLOps Pipeline for Pintu App Reviews | Live PostgreSQL Data</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: rgba(255,255,255,0.6); margin-bottom: 2rem;'>MLOps Pipeline for Pintu App Reviews</p>", unsafe_allow_html=True)
 
 if df.empty:
     st.warning("No data available. Please run the scraping process first.")
@@ -579,7 +579,7 @@ if df.empty:
 st.sidebar.markdown("## Filters")
 
 # Refresh button - Fixed - Full width vertically stacked
-if st.sidebar.button("↻ Refresh Data", use_container_width=True, key="refresh_btn"):
+if st.sidebar.button("Refresh Data", use_container_width=True, key="refresh_btn"):
     # Clear cache
     st.cache_data.clear()
     st.cache_resource.clear()
@@ -617,7 +617,7 @@ if not filtered_df.empty:
     if export_format == "CSV":
         csv_data = filtered_df.to_csv(index=False).encode('utf-8')
         st.sidebar.download_button(
-            "⬇ Download CSV",
+            "Download CSV",
             data=csv_data,
             file_name=f"pintu_sentiment_{datetime.now():%Y%m%d}.csv",
             mime="text/csv",
@@ -626,7 +626,7 @@ if not filtered_df.empty:
     else:
         json_data = filtered_df.to_json(orient='records', indent=2)
         st.sidebar.download_button(
-            "⬇ Download JSON",
+            "Download JSON",
             data=json_data,
             file_name=f"pintu_sentiment_{datetime.now():%Y%m%d}.json",
             mime="application/json",
@@ -642,7 +642,7 @@ else:
 # Visualization Section
 st.markdown("## Analytics")
 
-tab1, tab2, tab3, tab4 = st.tabs(["◉ Distribution", "▲ Trends", "≡ Details", "◐ Insights"])
+tab1, tab2, tab3, tab4 = st.tabs(["Distribution", "Trends", "Details", "Insights"])
 
 with tab1:
     # Key Metrics Cards Row
@@ -966,7 +966,7 @@ if metrics:
             border-radius: 20px;
             margin-bottom: 10px;
         '>
-            <span style='color: white; font-weight: bold;'>⚡ State-of-the-art Indonesian BERT Model</span>
+            <span style='color: white; font-weight: bold;'>⚡ Indonesian BERT Model</span>
         </div>
         """, unsafe_allow_html=True)
     

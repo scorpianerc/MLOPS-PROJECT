@@ -59,7 +59,7 @@ class SentimentPredictor:
             else:
                 # Create new preprocessor if not exists
                 import yaml
-                with open('params.yaml', 'r') as f:
+                with open('config/params.yaml', 'r') as f:
                     params = yaml.safe_load(f)
                 self.preprocessor = IndonesianTextPreprocessor(params['preprocessing'])
             

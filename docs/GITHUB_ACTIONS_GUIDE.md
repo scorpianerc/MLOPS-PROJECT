@@ -414,20 +414,9 @@ Add to workflow (mlops-pipeline.yml):
 - `PROD_SERVER_USER`: SSH username
 - `PROD_SERVER_SSH_KEY`: SSH private key
 
-### **Option 3: Oracle Cloud Deployment**
+---
 
-See [ORACLE_CLOUD_FREE_DEPLOYMENT.md](ORACLE_CLOUD_FREE_DEPLOYMENT.md) for complete setup.
-
-**Quick setup**:
-```bash
-# On Oracle Cloud VM
-git clone https://github.com/YOUR_USERNAME/REPO_NAME.git
-cd REPO_NAME
-
-# Login to GitHub Container Registry
-echo $GITHUB_TOKEN | docker login ghcr.io -u YOUR_USERNAME --password-stdin
-
-# Pull and start
+## 📦 Docker Image Registry
 docker-compose pull
 docker-compose up -d
 ```

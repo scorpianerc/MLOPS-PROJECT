@@ -343,10 +343,9 @@ print(f"Confidence: {sentiment['confidence']:.2%}")
 
 ## 📚 Additional Resources
 
-- **MLOps Architecture**: See `MLOPS_ARCHITECTURE.md`
-- **Implementation Guide**: See `MLOPS_IMPLEMENTATION_GUIDE.md`
 - **Quick Reference**: See `MLOPS_QUICK_REFERENCE.md`
-- **Oracle Cloud Deployment**: See `ORACLE_CLOUD_FREE_DEPLOYMENT.md`
+- **Monitoring Guide**: See `MONITORING_GUIDE.md`
+- **GitHub Actions**: See `GITHUB_ACTIONS_GUIDE.md`
 
 ---
 

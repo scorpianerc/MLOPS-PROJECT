@@ -1,4 +1,4 @@
-# MLOps Unified Pipeline - Quick Reference
+# MLOps Pipeline - Quick Reference
 
 ## 🚀 Quick Start
 

@@ -154,9 +154,9 @@ docker-compose up -d
 
 1. ✅ **Monitor workflows** in Actions tab
 2. ✅ **Add status badges** to README
-3. ✅ **Setup notifications** (Slack/Discord)
-4. ✅ **Deploy to Oracle Cloud** (optional)
-5. ✅ **Create pull requests** to trigger tests
+3. ✅ **Setup notifications** (Slack/Discord - optional)
+4. ✅ **Create pull requests** to trigger tests
+5. ✅ **Review deployment logs** for optimization
 
 ---
 

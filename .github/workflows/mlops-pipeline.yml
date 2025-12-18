@@ -65,8 +65,11 @@ jobs:
     - name: Check existing data
       id: check_data
       run: |
+        echo "🔍 Checking for data files..."
+        ls -lh data/raw/ || echo "data/raw/ directory not found"
         if [ -f "data/raw/reviews.csv" ]; then
           echo "✅ Found existing data in repository"
+          wc -l data/raw/reviews.csv
           echo "has_data=true" >> $GITHUB_OUTPUT
         else
           echo "⚠️ No existing data found"
